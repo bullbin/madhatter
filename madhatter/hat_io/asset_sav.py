@@ -1,6 +1,5 @@
 from . import binary
 from .asset import File
-from ..common import log
 
 from math import ceil
 
@@ -34,14 +33,14 @@ def fixChecksums(data):
     output.write(reader.read(16))
     reader.seek(4,1)
     temp.write(reader.read(196))
-    output.writeU4(calculateSaveChecksumFromData(temp.data))
+    output.writeU32(calculateSaveChecksumFromData(temp.data))
     output.write(temp.data)
     output.write(reader.read(56))
     for _slot in range(3):
         reader.seek(4,1)
         temp = binary.BinaryWriter()
         temp.write(reader.read(796))
-        output.writeU4(calculateSaveChecksumFromData(temp.data))
+        output.writeU32(calculateSaveChecksumFromData(temp.data))
         output.write(temp.data)
         output.write(reader.read(80))
     output.write(reader.read(8192 - reader.tell()))
@@ -523,16 +522,16 @@ class Layton2SaveSlot():
 
         self.puzzleData.setPuzzleBankFromBytes(reader.read(216))
         self.roomHintData.setFromBytes(reader.read(64))
-        self.hintCoinAvailable      = reader.readU2()
-        self.hintCoinEncountered    = reader.readU2()
-        self.picarots               = reader.readU4()
-        self.introEventIndex        = reader.readU4()
-        self.roomIndex              = reader.readU4()
-        self.roomSubIndex           = reader.readU4()
+        self.hintCoinAvailable      = reader.readU16()
+        self.hintCoinEncountered    = reader.readU16()
+        self.picarots               = reader.readU32()
+        self.introEventIndex        = reader.readU32()
+        self.roomIndex              = reader.readU32()
+        self.roomSubIndex           = reader.readU32()
 
         reader.seek(4,1)
         
-        self.timeElapsed            = reader.readU4()
+        self.timeElapsed            = reader.readU32()
 
         reader.seek(4,1)
 
@@ -566,12 +565,12 @@ class Layton2SaveSlot():
 
         reader.seek(3,1)
 
-        self.idImmediateEvent       = reader.readS2()
+        self.idImmediateEvent       = reader.readS16()
         self.anthonyDiaryState      = EnableNewFlagState.fromBytes(reader.read(4), 12, 2)
 
         reader.seek(4,1)
 
-        self.objective              = reader.readU4()
+        self.objective              = reader.readU32()
 
         if self.roomIndex != self.headerRoomIndex:
             self.isTampered = True
@@ -595,16 +594,16 @@ class Layton2SaveSlot():
             # TODO - Validate this
             data.write(self.puzzleData.getPuzzleBankBytes())
             data.write(self.roomHintData.getHintDataBytes())
-            data.writeU2(self.hintCoinAvailable)
-            data.writeU2(self.hintCoinEncountered)
-            data.writeU4(self.picarots)
-            data.writeU4(self.introEventIndex)
-            data.writeU4(self.roomIndex)
-            data.writeU4(self.roomSubIndex)
+            data.writeU16(self.hintCoinAvailable)
+            data.writeU16(self.hintCoinEncountered)
+            data.writeU32(self.picarots)
+            data.writeU32(self.introEventIndex)
+            data.writeU32(self.roomIndex)
+            data.writeU32(self.roomSubIndex)
 
             data.pad(4, padChar=b'\x00')
 
-            data.writeU4(self.timeElapsed)
+            data.writeU32(self.timeElapsed)
             
             data.pad(4, padChar = b'\x00')
 
@@ -645,7 +644,7 @@ class Layton2SaveSlot():
 
             data.writeInt(self.objective, 4)
 
-            writer.writeU4(calculateSaveChecksumFromData(data.data))
+            writer.writeU32(calculateSaveChecksumFromData(data.data))
             writer.write(data.data)
         else:
             writer.pad(800, padChar=b'\xff')
@@ -702,7 +701,7 @@ class Layton2SaveFile(File):
     def load(self, data):
         reader = binary.BinaryReader(data=data)
         if reader.readPaddedString(16, 'shift-jis') == "ATAMFIREBELLNY":
-            isTampered = reader.readU4() != calculateSaveChecksumFromData(reader.read(196))
+            isTampered = reader.readU32() != calculateSaveChecksumFromData(reader.read(196))
             reader.seek(20)
 
             activeSlots = reader.readUInt(1)
@@ -715,9 +714,9 @@ class Layton2SaveFile(File):
                     self.getSlotData(slotId).name = reader.readPaddedString(20, 'shift-jis')
                     self.getSlotData(slotId).headerRoomIndex = reader.readUInt(1)
                     reader.seek(23,1)   # Bleed from string data, doesn't contain anything relevant
-                    self.getSlotData(slotId).headerTimeElapsed = reader.readU4()
-                    self.getSlotData(slotId).headerPuzzleCountSolved = reader.readU2()
-                    self.getSlotData(slotId).headerPuzzleCountEncountered = reader.readU2()
+                    self.getSlotData(slotId).headerTimeElapsed = reader.readU32()
+                    self.getSlotData(slotId).headerPuzzleCountSolved = reader.readU16()
+                    self.getSlotData(slotId).headerPuzzleCountEncountered = reader.readU16()
                     self.getSlotData(slotId).isComplete = (reader.readUInt(1) == 1)
                     reader.seek(11,1)   # Unused?
                 else:

@@ -1,9 +1,11 @@
 import math
+from math import ceil, log
 from PIL import Image
 from os import path
 
-from . import binary
-from .asset import File
+from .. import binary
+from ..asset import File
+from ...common import log as debugPrint
 
 EXPORT_EXTENSION = "png"
 EXPORT_WITH_ALPHA = True    # Not recommended for in-engine as masking is faster
@@ -60,8 +62,8 @@ class Tile():
         self.res = (8,8)
     
     def fetchData(self, reader, bpp):
-        self.offset = (reader.readU2(), reader.readU2())
-        self.res = (2 ** (3 + reader.readU2()), 2 ** (3 + reader.readU2()))
+        self.offset = (reader.readU16(), reader.readU16())
+        self.res = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
         self.data = reader.read(int(bpp / 8 * self.res[0] * self.res[1]))
 
     def decodeToPil(self, palette, bpp):
@@ -140,22 +142,22 @@ class LaytonAnimatedImage(File):
     def load(self, data, isArj=False):
         reader = binary.BinaryReader(data = data)
         
-        countImages = reader.readU2()
-        bpp = 2 ** (reader.readU2() - 1)
+        countImages = reader.readU16()
+        bpp = 2 ** (reader.readU16() - 1)
         if isArj:
-            countColours = reader.readU4()
+            countColours = reader.readU32()
 
         for indexImage in range(countImages):
-            self.images.append(TiledImage(res=(reader.readU2(), reader.readU2())))
-            imageCountTiles = reader.readU4()
+            self.images.append(TiledImage(res=(reader.readU16(), reader.readU16())))
+            imageCountTiles = reader.readU32()
             for indexTile in range(imageCountTiles):
                 self.images[indexImage].tiles.append(Tile())
                 if isArj:
-                    self.images[indexImage].tiles[indexTile].glb = (reader.readU2(), reader.readU2())
+                    self.images[indexImage].tiles[indexTile].glb = (reader.readU16(), reader.readU16())
                 self.images[indexImage].tiles[indexTile].fetchData(reader, bpp)
         
         if not(isArj):
-            countColours = reader.readU4()
+            countColours = reader.readU32()
 
         palette = self.getPaletteAndAnimations(reader, countColours)
 
@@ -163,25 +165,25 @@ class LaytonAnimatedImage(File):
         if reader.hasDataRemaining():
             unk = reader.read(2)
             if unk != b'\x34\x12':
-                print("Variable magic failed, still reading forwards...")
+                log("Variable magic failed, still reading forwards...")
 
             self.variables      = []
             for _indexVar in range(16):
                 self.variables.append(ImageVariable(reader.readPaddedString(16, 'shift-jis')))
             for _indexData in range(8):
                 for indexVar in range(16):
-                    self.variables[indexVar].addData(reader.readS2())
+                    self.variables[indexVar].addData(reader.readS16())
 
             tempDimensions = [[],[]]
             for indexDimension in range(2):
                 for _indexPos in range(len(self.anims)):
-                    tempDimensions[indexDimension].append(reader.readU2())
+                    tempDimensions[indexDimension].append(reader.readU16())
             for indexAnim in range(len(self.anims)):
                 self.anims[indexAnim].offsetFace = (tempDimensions[0][indexAnim], tempDimensions[1][indexAnim])
                 self.anims[indexAnim].indexAnimFace = reader.readUInt(1)
             self.variableName = reader.readPaddedString(128, 'shift-jis')
             if reader.hasDataRemaining():
-                print("Did not reach end of image file!")
+                log("Did not reach end of image file!")
             
         for indexImage, image in enumerate(self.images):
             self.images[indexImage] = image.getPilConstructedImage(palette, bpp, isArj)
@@ -189,14 +191,14 @@ class LaytonAnimatedImage(File):
     def getPaletteAndAnimations(self, reader, countColours):
         palette = []
         if countColours > 1:
-            self.alphaMask = Colour.fromInt(reader.readU2()).toList()
+            self.alphaMask = Colour.fromInt(reader.readU16()).toList()
             countColours -= 1
             palette.extend(self.alphaMask)
         for _indexColour in range(countColours):
-            palette.extend(Colour.fromInt(reader.readU2()).toList())
+            palette.extend(Colour.fromInt(reader.readU16()).toList())
         
         reader.seek(30, 1)
-        countAnims = reader.readU4()
+        countAnims = reader.readU32()
         for indexAnim in range(countAnims):
             self.anims.append(AnimationBasicSequence())
             tempName = ((reader.read(30)).decode("ascii")).split("\x00")[0]
@@ -211,13 +213,13 @@ class LaytonAnimatedImage(File):
             self.anims[indexAnim].name = nameCorrection
 
         for indexAnim in range(countAnims):
-            countFrames = reader.readU4()
+            countFrames = reader.readU32()
             for _indexFrame in range(countFrames):
-                self.anims[indexAnim].indexFrames.append(reader.readU4())
+                self.anims[indexAnim].indexFrames.append(reader.readU32())
             for _indexFrame in range(countFrames):
-                self.anims[indexAnim].frameDuration.append(reader.readU4())
+                self.anims[indexAnim].frameDuration.append(reader.readU32())
             for _indexFrame in range(countFrames):
-                self.anims[indexAnim].indexImages.append(reader.readU4())
+                self.anims[indexAnim].indexImages.append(reader.readU32())
         return palette
 
     def save(self):
@@ -235,9 +237,9 @@ class LaytonAnimatedImage(File):
         paletteSurface = paletteSurface.quantize(colors=10)
 
         writer = binary.BinaryWriter()
-        writer.writeU2(len(self.images))
-        bpp = math.log(int(math.ceil(math.ceil(math.log(len(paletteSurface.getcolors()), 2)) / 4) * 4), 2)
-        writer.writeU2(int(bpp) + 1)
+        writer.writeU16(len(self.images))
+        bpp = log(int(ceil(ceil(log(len(paletteSurface.getcolors()), 2)) / 4) * 4), 2)
+        writer.writeU16(int(bpp) + 1)
         bpp = 2 ** bpp
 
         offsetX = 0
@@ -357,7 +359,7 @@ class LaytonBackgroundImage(File):
 
             if output.image.size[0] % 8 != 0 or output.image.size[1] % 8 != 0:  # Align image to block sizes by filling with transparency
                 tempOriginalImage = output.image
-                tempScaledDimensions = (math.ceil(output.image.size[0] / 8) * 8, math.ceil(output.image.size[1] / 8) * 8)
+                tempScaledDimensions = (ceil(output.image.size[0] / 8) * 8, ceil(output.image.size[1] / 8) * 8)
                 output.image = Image.new(tempOriginalImage.mode, tempScaledDimensions, color=0)
                 output.image.putpalette(tempOriginalImage.getpalette())
                 output.image.paste(tempOriginalImage, (0,0))
@@ -368,11 +370,11 @@ class LaytonBackgroundImage(File):
     def save(self):
         writer = binary.BinaryWriter()
         countColours = countPilPaletteColours(self.image)
-        writer.writeU4(countColours)
+        writer.writeU32(countColours)
         for colour in pilPaletteToRgbTriplets(self.image)[0:countColours]:
             r,g,b = colour
             tempEncodedColour = (b << 7) + (g << 2) + (r >> 3)
-            writer.writeU2(tempEncodedColour)
+            writer.writeU16(tempEncodedColour)
 
         tiles = []
         tilemap = []
@@ -390,36 +392,36 @@ class LaytonBackgroundImage(File):
                     tilemap.append(len(tiles))
                     tiles.append(tempTile)
         
-        writer.writeU4(len(tiles))
+        writer.writeU32(len(tiles))
         for tile in tiles:
             writer.write(tile.tobytes())
         
-        writer.writeU2(self.image.size[0] // 8)
-        writer.writeU2(self.image.size[1] // 8)
+        writer.writeU16(self.image.size[0] // 8)
+        writer.writeU16(self.image.size[1] // 8)
         for key in tilemap:
-            writer.writeU2(key)
+            writer.writeU16(key)
 
         self.data = writer.data
 
     def load(self, data):
         reader = binary.BinaryReader(data=data)
-        lengthPalette = reader.readU4()
+        lengthPalette = reader.readU32()
         palette = []
         for _indexColour in range(lengthPalette):
-            palette.extend(Colour.fromInt(reader.readU2()).toList())
+            palette.extend(Colour.fromInt(reader.readU16()).toList())
 
         tilePilMap = {}
-        countTile = reader.readU4()
+        countTile = reader.readU32()
         for index in range(countTile):
             tilePilMap[index] = Tile(data=reader.read(64)).decodeToPil(palette, 8)
         
-        resTile = [reader.readU2(), reader.readU2()]
+        resTile = [reader.readU16(), reader.readU16()]
         self.image = Image.new("P", (int(resTile[0] * 8), int(resTile[1] * 8)))
         self.image.putpalette(palette)
 
         for y in range(resTile[1]):
             for x in range(resTile[0]):
-                tempSelectedTile = reader.readU2()
+                tempSelectedTile = reader.readU16()
                 tileSelectedIndex = tempSelectedTile & (2 ** 10 - 1)
                 tileSelectedFlipX = tempSelectedTile & (2 ** 11)
                 tileSelectedFlipY = tempSelectedTile & (2 ** 10)

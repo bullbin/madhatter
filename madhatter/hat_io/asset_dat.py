@@ -56,7 +56,7 @@ class LaytonPlaceData(File):
 
     def load(self, data):
         reader = binary.BinaryReader(data=data)
-        self.roomId = reader.readU4()
+        self.roomId = reader.readU32()
         reader.seek(20, 1)
         self.mapPos = (reader.readUInt(1), reader.readUInt(1))
         self.mapBgId = reader.readUInt(1)
@@ -118,8 +118,8 @@ class LaytonEventData(File):
     
     def load(self, data):
         reader = binary.BinaryReader(data = data)
-        self.mapBsId = reader.readU2()
-        self.mapTsId = reader.readU2()
+        self.mapBsId = reader.readU16()
+        self.mapTsId = reader.readU16()
 
         reader.seek(2,1)
 
@@ -177,8 +177,8 @@ class LaytonPuzzleData(File):
 
         reader = binary.BinaryReader(data = data)
 
-        self.idExternal = reader.readU2()
-        offsetText = reader.readU2()
+        self.idExternal = reader.readU16()
+        offsetText = reader.readU16()
         self.textName = reader.readPaddedString(48, 'shift-jis')
         self.idTutorial = reader.readUInt(1)
         self.decayPicarots = [reader.readUInt(1), reader.readUInt(1), reader.readUInt(1)]
@@ -199,18 +199,18 @@ class LaytonPuzzleData(File):
         self.unks[2] = reader.read(1)   # Seems to be background related, as ranges between 1 and 4
         self.idBackgroundTs = reader.readUInt(1)
         self.idReward = reader.readInt(1)
-        self.textPrompt = seekAndReadNullTerminatedString(reader.readU4() + offsetText, reader)
-        self.textPass = seekAndReadNullTerminatedString(reader.readU4() + offsetText, reader)
-        self.textFail = seekAndReadNullTerminatedString(reader.readU4() + offsetText, reader)
+        self.textPrompt = seekAndReadNullTerminatedString(reader.readU32() + offsetText, reader)
+        self.textPass = seekAndReadNullTerminatedString(reader.readU32() + offsetText, reader)
+        self.textFail = seekAndReadNullTerminatedString(reader.readU32() + offsetText, reader)
         for indexHint in range(3):
-            self.textHint[indexHint] = seekAndReadNullTerminatedString(reader.readU4() + offsetText, reader)
+            self.textHint[indexHint] = seekAndReadNullTerminatedString(reader.readU32() + offsetText, reader)
 
     def save(self):
         # TODO - Checks for none
 
         writer = binary.BinaryWriter()
-        writer.writeU2(self.idExternal)
-        writer.writeU2(LaytonPuzzleData.OFFSET_TEXT_DEFAULT)
+        writer.writeU16(self.idExternal)
+        writer.writeU16(LaytonPuzzleData.OFFSET_TEXT_DEFAULT)
         writer.writePaddedString(self.textName, 48, 'shift-jis')
         writer.writeInt(self.idTutorial, 1)
         writer.writeIntList(self.decayPicarots, 1)

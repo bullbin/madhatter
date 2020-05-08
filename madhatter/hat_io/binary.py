@@ -45,7 +45,7 @@ class BinaryReader():
     def readFloat(self, length):
         return unpack("<f", self.read(length))[0]
 
-    def readF4(self):
+    def readF32(self):
         return self.readFloat(4)
     
     def readInt(self, length, signed=True):
@@ -54,28 +54,28 @@ class BinaryReader():
     def readUInt(self, length):
         return self.readInt(length, signed=False)
 
-    def readU2(self):
+    def readU16(self):
         return self.readUInt(2)
 
-    def readU4(self):
+    def readU32(self):
         return self.readUInt(4)
     
-    def readU4List(self, length):
+    def readU32List(self, length):
         out = []
         for _index in range(length):
-            out.append(self.readU4())
+            out.append(self.readU32())
         return out
 
-    def readU8(self):
+    def readU64(self):
         return self.readUInt(8)
     
-    def readS2(self):
+    def readS16(self):
         return self.readInt(2)
 
-    def readS4(self):
+    def readS32(self):
         return self.readInt(4)
     
-    def readS8(self):
+    def readS64(self):
         return self.readInt(8)
     
     def readNullTerminatedString(self, encoding):
@@ -138,19 +138,19 @@ class BinaryWriter():
         self.data.extend(tempString)
         self.pad(extraPadLength, padChar=padChar)
 
-    def writeU2(self, data):
+    def writeU16(self, data):
         self.writeInt(data, 2)
 
-    def writeU4(self, data):
+    def writeU32(self, data):
         self.writeInt(data, 4)
     
-    def writeU8(self, data):
+    def writeU64(self, data):
         self.writeInt(data, 8)
 
-    def writeS4(self, data):
+    def writeS32(self, data):
         self.writeInt(data, 4, signed=True)
     
-    def writeU4L(self, dataList):
+    def writeU32L(self, dataList):
         self.writeIntList(dataList, 4)
     
     def insert(self, data, pos):

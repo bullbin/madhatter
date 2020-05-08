@@ -38,9 +38,9 @@ class LaytonDlz(File):
     def load(self, data, entryObject=EntryUnknown):
         if data != None:
             reader = binary.BinaryReader(data=data)
-            countEntry = reader.readU2()
+            countEntry = reader.readU16()
             reader.seek(2,1)    # Always 8
-            sizeEntry = reader.readU4()
+            sizeEntry = reader.readU32()
             try:
                 for _indexEntry in range(countEntry):
                     self.entries.append(entryObject(data=reader.read(sizeEntry)))

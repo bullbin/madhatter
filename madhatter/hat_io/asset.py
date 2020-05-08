@@ -180,14 +180,14 @@ class File():
             for data in tempByte:
                 for bit in keyDict[bytes(data)]:
                     if compressionBlockBitsRemaining == 0:
-                        writer.writeU4(compressionBlock)
+                        writer.writeU32(compressionBlock)
                         compressionBlock = 0
                         compressionBlockBitsRemaining = 32
                     compressionBlockBitsRemaining -= 1
                     if bit:
                         compressionBlock = compressionBlock | (1 << compressionBlockBitsRemaining)
         if compressionBlockBitsRemaining != 32:
-            writer.writeU4(compressionBlock)
+            writer.writeU32(compressionBlock)
         writer.dsAlign(4, 4)
 
         if addHeader:
@@ -221,7 +221,7 @@ class File():
         while writer.tell() < tempFilesize:    # Ported from DsDecmp
             while currentNode.data == None:
                 if bitsLeft == 0:
-                    data = reader.readU4()
+                    data = reader.readU32()
                     bitsLeft = 32
                 bitsLeft-=1
                 nextIsRight = (data & (1 << bitsLeft)) != 0
@@ -388,8 +388,8 @@ class LaytonPack(Archive):
 
     def load(self, data):
         reader = binary.BinaryReader(data = data)
-        offsetHeader = reader.readU4()
-        lengthArchive = reader.readU4()
+        offsetHeader = reader.readU32()
+        lengthArchive = reader.readU32()
         if self._version == 0:
             reader.seek(4,1)    # Skip countFile (v0)
         magic = reader.read(4)
@@ -397,7 +397,7 @@ class LaytonPack(Archive):
             # self._version = LaytonPack.MAGIC.index(magic)
             reader.seek(offsetHeader)
             while reader.tell() != lengthArchive:
-                metadata = reader.readU4List(4)
+                metadata = reader.readU32List(4)
                 self.files.append(File(name = reader.readPaddedString(metadata[0] - LaytonPack.METADATA_BLOCK_SIZE, encoding = 'shift-jis'),
                                        data = reader.read(metadata[3])))
                 reader.seek(metadata[1] - (metadata[3] + metadata[0]), 1)
@@ -408,21 +408,21 @@ class LaytonPack(Archive):
     def save(self):
         # TODO - Support writing LT2 PCK files, which differ only in that they specify the start offset of the file.
         writer = binary.BinaryWriter()
-        writer.writeU4(16)
-        writer.writeU4(0)
-        writer.writeU4(len(self.files))
+        writer.writeU32(16)
+        writer.writeU32(0)
+        writer.writeU32(len(self.files))
         writer.write(LaytonPack.MAGIC[self._version])
         for fileChunk in self.files:
             header = binary.BinaryWriter()
             data = binary.BinaryWriter()
             data.writeString(fileChunk.name, 'shift-jis')
             data.align(4)
-            header.writeU4(data.tell() + LaytonPack.METADATA_BLOCK_SIZE)
+            header.writeU32(data.tell() + LaytonPack.METADATA_BLOCK_SIZE)
             data.write(fileChunk.data)
             data.dsAlign(4, 4)
-            header.writeU4(data.tell() + LaytonPack.METADATA_BLOCK_SIZE)
-            header.writeU4(0)
-            header.writeU4(len(fileChunk.data))
+            header.writeU32(data.tell() + LaytonPack.METADATA_BLOCK_SIZE)
+            header.writeU32(0)
+            header.writeU32(len(fileChunk.data))
             writer.write(header.data)
             writer.write(data.data)
         writer.insert(writer.tell().to_bytes(4, byteorder = 'little'), 4)
@@ -438,17 +438,17 @@ class LaytonPack2(Archive):
     def load(self, data):
         reader = binary.BinaryReader(data = data)
         if reader.read(4) == b'LPC2':
-            countFile = reader.readU4()
-            offsetFile = reader.readU4()
-            _lengthArchive = reader.readU4()
-            offsetMetadata = reader.readU4()
-            offsetName = reader.readU4()
+            countFile = reader.readU32()
+            offsetFile = reader.readU32()
+            _lengthArchive = reader.readU32()
+            offsetMetadata = reader.readU32()
+            offsetName = reader.readU32()
             
             for indexFile in range(countFile):
                 reader.seek(offsetMetadata + (12 * indexFile))
-                fileOffsetName = reader.readU4()
-                fileOffsetData = reader.readU4()
-                fileLengthData = reader.readU4()
+                fileOffsetName = reader.readU32()
+                fileOffsetData = reader.readU32()
+                fileLengthData = reader.readU32()
 
                 reader.seek(offsetName + fileOffsetName)
                 tempName = reader.readNullTerminatedString('shift-jis')
@@ -465,9 +465,9 @@ class LaytonPack2(Archive):
         sectionName = binary.BinaryWriter()
         sectionData = binary.BinaryWriter()
         for fileIndex, fileChunk in enumerate(self.files):
-            metadata.writeU4(sectionName.tell())
-            metadata.writeU4(sectionData.tell())
-            metadata.writeU4(len(fileChunk.data))
+            metadata.writeU32(sectionName.tell())
+            metadata.writeU32(sectionData.tell())
+            metadata.writeU32(len(fileChunk.data))
 
             sectionName.writeString(fileChunk.name, 'shift-jis')
             if fileIndex < len(self.files):
@@ -480,12 +480,12 @@ class LaytonPack2(Archive):
         
         writer = binary.BinaryWriter()
         writer.write(b'LPC2')
-        writer.writeU4(len(self.files))
-        writer.writeU4(LaytonPack2.HEADER_BLOCK_SIZE + metadata.tell() + sectionName.tell())
-        writer.writeU4(0) # EOFC, not written until end
-        writer.writeU4(LaytonPack2.HEADER_BLOCK_SIZE)
-        writer.writeU4(LaytonPack2.HEADER_BLOCK_SIZE + metadata.tell())
-        writer.writeU4(LaytonPack2.HEADER_BLOCK_SIZE + metadata.tell() + sectionName.tell())
+        writer.writeU32(len(self.files))
+        writer.writeU32(LaytonPack2.HEADER_BLOCK_SIZE + metadata.tell() + sectionName.tell())
+        writer.writeU32(0) # EOFC, not written until end
+        writer.writeU32(LaytonPack2.HEADER_BLOCK_SIZE)
+        writer.writeU32(LaytonPack2.HEADER_BLOCK_SIZE + metadata.tell())
+        writer.writeU32(LaytonPack2.HEADER_BLOCK_SIZE + metadata.tell() + sectionName.tell())
         writer.pad(LaytonPack2.HEADER_BLOCK_SIZE - writer.tell())
         writer.write(metadata.data)
         writer.write(sectionName.data)

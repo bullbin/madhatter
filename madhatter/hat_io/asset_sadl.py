@@ -1,6 +1,7 @@
 from math import ceil
 from . import binary
 from .asset import File
+from ..common import log
 
 CONST_PROCYON_COEF      = [(0,0),
                            (60,0),
@@ -74,10 +75,10 @@ class MusicSadlAsWave(File):
             coding = coding & 0xf0
             
             reader.seek(0x40)
-            filesize = int.from_bytes(reader.readU4(), byteorder = 'little')
+            filesize = reader.readU32()
                 
             if coding == 0x70:
-                print("Unsupport: INT_IMA")
+                log("Unsupported: INT_IMA")
                 sampleNumber = int((filesize - 0x100) / countChannels * 2)
                 self.data = bytearray(b'')
             else:

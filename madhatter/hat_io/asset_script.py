@@ -62,9 +62,9 @@ class LaytonScript(File):
             for indexOperand in range(countOperands):
                 tempOperandType = reader.readUInt(1)
                 if tempOperandType == 0:
-                    tempOperand = reader.readS4()
+                    tempOperand = reader.readS32()
                 elif tempOperandType == 1:
-                    tempOperand = reader.readF4()
+                    tempOperand = reader.readF32()
                 elif tempOperandType == 2:
                     tempOperand = bankString[reader.readU32()]
                 else:

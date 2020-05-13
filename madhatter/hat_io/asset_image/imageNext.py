@@ -28,7 +28,16 @@ def getBpp(lengthPalette):
         return 4
     elif lengthPalette < 1 or lengthPalette > 256:
         return None
-    return ceil(log(lengthPalette, 2) / 4) * 4 
+    return ceil(log(lengthPalette, 2) / 4) * 4
+
+def getTransparentLaytonPaletted(inputImage):
+    output = inputImage.copy().convert("RGBA")
+    width, height = inputImage.size
+    for y in range(height):
+        for x in range(width):
+            if inputImage.getpixel((x,y)) == 0:
+                output.putpixel((x,y), (0,0,0,0))
+    return output
 
 def constructFinalImage(reader, palette, resolution, tileImages):
     width, height = resolution
@@ -52,19 +61,24 @@ def constructFinalImage(reader, palette, resolution, tileImages):
     return output
 
 class AnimationFramePartialDetails():
-    def __init__(self, atlasKey, atlasSubImageIndex):
-        self.atlasKey           = atlasKey
-        self.atlasSubImageIndex = atlasSubImageIndex
-        self.pos                = (0,0)
+    def __init__(self, atlasImage, atlasSubImageIndex):
+        self.atlasImageReference = atlasImage
+        self.atlasSubImageIndex  = atlasSubImageIndex
+        self.pos                 = (0,0)
 
 class AnimationFrame():
     def __init__(self):
-        self.name = None
-        self.dimensions = None
+        self.name = ""
+        self.dimensions = (0,0)
         self.imageComponents = []
 
-    def getComposedFrame(self):
-        pass
+    def getComposedFrame(self): # TODO : Store transparent version of atlas to avoid alpha reprocessing
+        output = Image.new("RGBA", self.dimensions)
+        for frameRef in self.imageComponents:
+            targetImage = frameRef.atlasImageReference.getImage(frameRef.atlasSubImageIndex)
+            targetImageAlpha = getTransparentLaytonPaletted(targetImage)
+            output.paste(targetImageAlpha, frameRef.pos, targetImageAlpha)
+        return output
 
 class AnimationKeyframe():
     def __init__(self):
@@ -73,11 +87,20 @@ class AnimationKeyframe():
 
 class Animation():
     def __init__(self):
-        self.name = None
+        self.name = ""
         self.keyframes = []
         self.indexSubanimation = None
         self.keySubanimation = None
     
+    def addKeyframe(self, frame):
+        self.keyframes.append(frame)
+    
+    def setName(self, name):
+        self.name = name
+
+    def getName(self, name):
+        return self.name
+
     def getFrameAtIndex(self, index):
         pass
 
@@ -93,6 +116,9 @@ class AnimatedImage():
         self.frames = []
         self.animations = []
     
+    def debugSave(self):
+        pass
+
     @staticmethod
     def fromBytesCAni(data):
         output = AnimatedImage()
@@ -109,6 +135,7 @@ class AnimatedImage():
         
         atlasesAsIndex  = {}
         workingFrame    = AnimationFrame()
+        workingAnim     = Animation()
         
         for command in scriptAnim.commands:
             if command.opcode == OPCODE_LOAD_ASSET:
@@ -122,12 +149,28 @@ class AnimatedImage():
 
             elif command.opcode == OPCODE_DEFINITION_FRAME_MIX_CONTENT:
                 # TODO : Research last unknown
-                subFrameInfo            = AnimationFramePartialDetails(atlasesAsIndex[command.operands[0].value], command.operands[1].value)
+                subFrameInfo            = AnimationFramePartialDetails(output.atlases[atlasesAsIndex[command.operands[0].value]], command.operands[1].value)
                 subFrameInfo.pos        = (command.operands[2].value, command.operands[3].value)
                 workingFrame.imageComponents.append(subFrameInfo)
 
             elif command.opcode == OPCODE_DEFINITION_FRAME_END:
                 output.frames.append(workingFrame)
+            
+            elif command.opcode == OPCODE_DEFINITION_ANIM_START:
+                workingAnim = Animation()
+                workingAnim.setName(command.operands[0].value)
+                # TODO: Implement rest of unknowns (crop, offset)
+            
+            elif command.opcode == OPCODE_DEFINITION_ANIM_MIX_FRAME:
+                tempFrame = AnimationKeyframe()
+                tempFrame.indexFrame = command.operands[0].value
+                tempFrame.duration = command.operands[1].value
+                workingAnim.keyframes.append(tempFrame)
+            
+            elif command.opcode == OPCODE_DEFINITION_ANIM_END:
+                output.animations.append(workingAnim)
+        
+        return output
 
 class StaticImage():
     def __init__(self):

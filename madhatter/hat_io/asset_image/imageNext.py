@@ -1,34 +1,12 @@
 from PIL import Image
 from .imageOpcodes import *
-from .imageConst import *
 from .. import binary
 from ...common import Rect
 from ..asset import File, LaytonPack2
 from ..asset_script import LaytonScript
 from math import log, ceil
-
-def getColoursAsList(reader):
-    packedColour = reader.readU16()
-    b = ((packedColour >> 10) & 0x1f) / 31
-    g = ((packedColour >> 5) & 0x1f) / 31
-    r = (packedColour & 0x1f) / 31
-    if IMAGE_FORCE_FULL_RANGE_COLOUR:
-        return ([int(r * 255), int(g * 255), int(b * 255)])
-    return ([int(r * 248), int(g * 248), int(b * 248)])
-
-def getPaletteAsList(reader, countPalette):
-    palette = []
-    for _indexColour in range(countPalette):
-        palette.extend(getColoursAsList(reader))
-    return palette
-
-def getBpp(lengthPalette):
-    # Note: will fail if 1 colour, or above 8 bpp (bad)
-    if lengthPalette == 1:
-        return 4
-    elif lengthPalette < 1 or lengthPalette > 256:
-        return None
-    return ceil(log(lengthPalette, 2) / 4) * 4
+from .tiler import Tile, TiledImageHandler
+from .colour import getPaletteAsListFromReader, getPackedColourFromRgb888
 
 def getTransparentLaytonPaletted(inputImage):
     output = inputImage.copy().convert("RGBA")
@@ -37,27 +15,6 @@ def getTransparentLaytonPaletted(inputImage):
         for x in range(width):
             if inputImage.getpixel((x,y)) == 0:
                 output.putpixel((x,y), (0,0,0,0))
-    return output
-
-def constructFinalImage(reader, palette, resolution, tileImages):
-    width, height = resolution
-    output = Image.new("P", resolution)
-    output.putpalette(palette)
-    output.paste(0, (0,0,width,height))
-    for y in range(ceil(height / 8)):
-        for x in range(ceil(width / 8)):
-            tempSelectedTile = reader.readU16()
-            tileSelectedIndex = tempSelectedTile & (2 ** 10 - 1)
-            tileSelectedFlipX = tempSelectedTile & (2 ** 11)
-            tileSelectedFlipY = tempSelectedTile & (2 ** 10)
-
-            if tileSelectedIndex < (2 ** 10 - 1):
-                tileFocus = tileImages[tileSelectedIndex % len(tileImages)]
-                if tileSelectedFlipX:
-                    tileFocus = tileFocus.transpose(method=Image.FLIP_LEFT_RIGHT)
-                if tileSelectedFlipY:
-                    tileFocus = tileFocus.transpose(method=Image.FLIP_TOP_BOTTOM)
-                output.paste(tileFocus, (x * 8, y * 8))
     return output
 
 class AnimationFramePartialDetails():
@@ -117,6 +74,10 @@ class AnimatedImage():
         self.animations = []
     
     def debugSave(self):
+        pass
+
+    @staticmethod
+    def fromBytesArc(data):
         pass
 
     @staticmethod
@@ -197,16 +158,51 @@ class StaticImage():
     def fromBytesArc(data):
         output = StaticImage()
         reader = binary.BinaryReader(data=data)
-        palette = getPaletteAsList(reader, reader.readU32())
-
-        tilePilMap = {}
+        workingImage = TiledImageHandler()
+        
+        lengthPalette = reader.readU32()
+        workingImage.setPaletteFromList(getPaletteAsListFromReader(reader, lengthPalette), countColours=lengthPalette)
         for index in range(reader.readU32()):
-            tilePilMap[index] = Tile(data=reader.read(64)).decodeToPil(palette, 8)
+            workingImage.addTileFromReader(reader, overrideBpp=8)
         
         resolution = (reader.readU16() * 8, reader.readU16() * 8)
-        output.addImage(constructFinalImage(reader, palette, resolution, tilePilMap))
+        tileMap = {}
+        for index in range(int((resolution[0] * resolution[1]) // 64)):
+            tileMap[index] = reader.readU16()
+
+        workingImage.setTileMap(tileMap)
+        output.addImage(workingImage.tilesToImage(resolution))
         return output
     
+    def toBytesArc(self):
+        # TODO - Not this...
+        tempOutput = []
+        for indexImage in range(self.getCountImages()):
+            inputImage = self.getImage(indexImage)
+            workingImage = TiledImageHandler()
+            padWidth, padHeight = workingImage.imageToTiles(inputImage)
+
+            palette = workingImage.getPalette()
+            tiles = workingImage.getTiles()
+            tileMap = workingImage.getTileMap()
+
+            writer = binary.BinaryWriter()
+            writer.writeU32(len(palette))
+            for r,g,b in palette:
+                writer.writeU16(getPackedColourFromRgb888(r,g,b))
+            
+            writer.writeU32(len(tiles))
+            for tile in tiles:
+                writer.write(tile.toBytes(8))
+
+            writer.writeIntList([padWidth // 8, padHeight // 8], 2)
+            for indexTile in range(len(tileMap)):
+                writer.writeU16(tileMap[indexTile])
+
+            tempOutput.append(writer.data)
+
+        return tempOutput
+
     @staticmethod
     def fromBytesLImg(data):
         output = StaticImage()
@@ -215,29 +211,34 @@ class StaticImage():
             lengthHeader        = reader.readU32()
             offsetSubImageData  = reader.readU16()
             countSubImage       = reader.readU16()
-            offsetImageParam    = reader.readU16()
+            _offsetImageParam    = reader.readU16()
             reader.seek(2,1)                            # UNK
             offsetTableTile     = reader.readU16()
             lengthTableTile     = reader.readU16()
             offsetTile          = reader.readU16()
             countTile           = reader.readU16()
-            countPalette        = reader.readU16()
+            reader.seek(2,1)                            # UNK, maybe countPalette
             lengthPalette       = reader.readU16()
             resolution          = (reader.readU16(),
                                    reader.readU16())
             
-            bpp = getBpp(lengthPalette)
+            workingImage = TiledImageHandler()
+
             reader.seek(lengthHeader)
-            palette = getPaletteAsList(reader, lengthPalette)
+            workingImage.setPaletteFromList(getPaletteAsListFromReader(reader, lengthPalette), countColours=lengthPalette)
 
             reader.seek(offsetTile)
-            tilePilMap = {}
-            for index in range(countTile):
-                tilePilMap[index] = Tile(data=reader.read(int((bpp * 64) / 8))).decodeToPil(palette, bpp)
+            for _index in range(countTile):
+                workingImage.addTileFromReader(reader)
             
             reader.seek(offsetTableTile)
-            packedTexture = constructFinalImage(reader, palette, resolution, tilePilMap)
-            
+            tileMap = {}
+            for index in range(lengthTableTile):
+                tileMap[index] = reader.readU16()
+            workingImage.setTileMap(tileMap)
+
+            packedTexture = workingImage.tilesToImage(resolution)
+
             reader.seek(offsetSubImageData)
             for _subImageCount in range(countSubImage):
                 left = reader.readUInt(1) * 8
@@ -247,31 +248,3 @@ class StaticImage():
                 output.addImage(packedTexture.crop((left, upper, left + width, upper + height)))
                 reader.seek(4,1)                        # UNK
         return output
-
-class Tile():
-    def __init__(self, data=None):
-        self.data   = data
-        self.glb    = (0,0)
-        self.offset = (0,0)
-        self.res    = (8,8)
-    
-    def fetchData(self, reader, bpp):
-        self.offset = (reader.readU2(), reader.readU2())
-        self.res = (2 ** (3 + reader.readU2()), 2 ** (3 + reader.readU2()))
-        self.data = reader.read(int(bpp / 8 * self.res[0] * self.res[1]))
-
-    def decodeToPil(self, palette, bpp):
-        image = Image.new("P", self.res)
-        image.putpalette(palette)
-        pixelY = -1
-        pixelX = 0
-        for indexPixel in range(int(self.res[0] * self.res[1] * (bpp/8))):
-            pixelByte = self.data[indexPixel]
-            if indexPixel % int(self.res[0] * bpp/8) == 0:
-                pixelY += 1
-                pixelX = 0
-            for _indexSubPixel in range(int(1/(bpp/8))):
-                image.putpixel((pixelX, pixelY), (pixelByte & ((2**bpp) - 1)) % (len(palette) // 3))
-                pixelByte = pixelByte >> bpp
-                pixelX += 1
-        return image

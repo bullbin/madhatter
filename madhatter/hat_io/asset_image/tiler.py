@@ -1,7 +1,12 @@
 from ..binary import BinaryWriter
+from ...common import log as logPrint
 from PIL import Image
 from PIL.ImageFilter import GaussianBlur
-from math import ceil
+from math import ceil, log
+
+# TODO - Give method to TiledImage which iterates through every pixel of image,
+#        and eliminates any unused colours from the palette.
+#        Should be useful once alpha has been applied to cleanup excess pixels.
 
 def alignToFitTile(image):
     width, height = image.size
@@ -28,6 +33,21 @@ def alignToFitTile(image):
             output.paste(image.convert("RGB"), (0,0))
     return output
 
+def purgePaletteList(palette):
+    output = []
+    for indexTriplet in range(len(palette) // 3):
+        indexTriplet = indexTriplet * 3
+        tempTriplet = [palette[indexTriplet],
+                       palette[indexTriplet + 1],
+                       palette[indexTriplet + 2]]
+        
+        if tempTriplet[0] == tempTriplet[1] == tempTriplet[2]:  # Primitive
+            if tempTriplet[0] == indexTriplet // 3:
+                break
+        
+        output.extend(tempTriplet)
+    return output
+
 class Tile():
 
     DEFAULT_RESOLUTION  = (8,8)
@@ -40,6 +60,7 @@ class Tile():
         self.offset = (0,0)
     
     def setImageFromBytes(self, data, resolution, bpp, palette):
+        # TODO - Fix length of palette as this will always be 768 under PIL
         self.image = Image.new("P", resolution)
         self.image.putpalette(palette)
         width, height = resolution
@@ -48,7 +69,7 @@ class Tile():
         for indexPixel in range(width * height * bpp // 8):
             packedPixel = data[indexPixel]
             for _indexSubPixel in range(8 // bpp):
-                self.image.putpixel((x,y), (packedPixel & ((2 ** bpp) - 1)) & (len(palette) // 3))
+                self.image.putpixel((x,y), (packedPixel & ((2 ** bpp) - 1)) % (len(palette) // 3))
                 packedPixel = packedPixel >> bpp
                 x += 1
                 if x == width:
@@ -97,32 +118,68 @@ class Tile():
 class TiledImageHandler():
 
     MAX_COUNT_COLOURS = 250
-    COLOUR_ALPHA = [200,0,200]
+    COLOUR_ALPHA = [0,255,0]
 
     def __init__(self):
         self.tiles = []
         self.tileMap = {}       # TilePackedPos -> Tile
         self.paletteRgbTriplets = []
         self.paletteContinuous = []
-        self.bpp = 0
     
-    def setPaletteFromList(self, palette):
-        self.paletteContinuous = palette
-        self.paletteRgbTriplets = []
+    def getLengthPalette(self):
+        return len(self.paletteRgbTriplets)
 
-        for indexTriplet in range(len(palette) // 3):
+    def getBpp(self):
+        if self.getLengthPalette() == 1:
+            return 4
+        elif self.getLengthPalette() < 1 or self.getLengthPalette() > 256:
+            return None
+        return ceil(log(self.getLengthPalette(), 2) / 4) * 4
+
+    def getTiles(self):
+        return self.tiles
+
+    def getPalette(self):
+        return self.paletteRgbTriplets
+
+    def getTileMap(self):
+        return self.tileMap
+
+    def setTileMap(self, tileMap):
+        self.tileMap = tileMap
+
+    def setPaletteFromList(self, palette, countColours=-1):
+        # logPrint(palette)
+        # TODO : Get palette from any internal tiles to prevent too little/too many colours being added
+        self.paletteRgbTriplets = []
+        
+        if countColours == -1:
+            palette = purgePaletteList(palette)
+            searchLength = len(palette) // 3
+        else:
+            searchLength = countColours
+
+        self.paletteContinuous = palette
+
+        for indexTriplet in range(searchLength):
             indexTriplet = indexTriplet * 3
             tempTriplet = (palette[indexTriplet],
                            palette[indexTriplet + 1],
                            palette[indexTriplet + 2])
+
             if tempTriplet not in self.paletteRgbTriplets:
                 self.paletteRgbTriplets.append(tempTriplet)
-            else:  # Stop if duplicate found
-                break
+            # TODO - Remap list in case of duplicates
 
-    def addTileFromReader(self, reader, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET):
-        dataLength = resolution[0] * resolution[1] * self.bpp / 8
-        tempTile = Tile.fromBytes(reader.read(dataLength), resolution, self.bpp, self.paletteContinuous)
+        logPrint("Palette set to", len(self.paletteRgbTriplets))
+
+    def addTileFromReader(self, reader, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET, overrideBpp=-1):
+        if overrideBpp != -1:
+            bpp = overrideBpp
+        else:
+            bpp = self.getBpp()
+        dataLength = int(resolution[0] * resolution[1] * bpp / 8)
+        tempTile = Tile.fromBytes(reader.read(dataLength), resolution, bpp, self.paletteContinuous)
         tempTile.setGlb(glb)
         tempTile.setOffset(offset)
         self.tiles.append(tempTile)
@@ -131,7 +188,7 @@ class TiledImageHandler():
         width, height = resolution
         output = Image.new("P", resolution)
         output.putpalette(self.paletteContinuous)
-        output.paste(0, (0, 0, width, height))
+        output.paste(0, (0,0,width,height))
 
         if useOffset:
             for tile in self.tiles:
@@ -142,9 +199,11 @@ class TiledImageHandler():
             for indexTile in tileMapIndices:
                 y = indexTile // resolutionXTiles
                 x = indexTile % resolutionXTiles
-                tileSelectedIndex = indexTile & (2 ** 10 - 1)
-                tileSelectedFlipX = indexTile & (2 ** 11)
-                tileSelectedFlipY = indexTile & (2 ** 10)
+
+                selectedTile = self.tileMap[indexTile]
+                tileSelectedIndex = selectedTile & (2 ** 10 - 1)
+                tileSelectedFlipX = selectedTile & (2 ** 11)
+                tileSelectedFlipY = selectedTile & (2 ** 10)
 
                 if tileSelectedIndex < (2 ** 10 - 1):
                     tileFocus = self.tiles[tileSelectedIndex % len(self.tiles)]
@@ -152,18 +211,22 @@ class TiledImageHandler():
                         tileFocus = tileFocus.transpose(method=Image.FLIP_LEFT_RIGHT)
                     if tileSelectedFlipY:
                         tileFocus = tileFocus.transpose(method=Image.FLIP_TOP_BOTTOM)
-                    output.paste(tileFocus, (x * 8, y * 8))
+                    output.paste(tileFocus.getImage(), (x * 8, y * 8))
         return output
     
     def imageToTiles(self, image, useOffset=False):
         # TODO : Extend palette, change palette, etc
+        logPrint("Called to convert!")
+        logPrint("\tInput:", image.mode)
         imagePadded = alignToFitTile(image)
         width, height = imagePadded.size
+        logPrint("\tNew dimensions", width, "x", height)
         if width > (2 ** 16 - 1) or height > (2 ** 16 - 1):
             return
         
         alphaFillPixels = []
         if imagePadded.mode == "RGBA":
+            logPrint("Fixing alpha...")
             # Get alpha pixels
             blurredImage = imagePadded.convert("RGB").filter(GaussianBlur(radius=4))
             compositedImage = Image.new("RGB", imagePadded.size)
@@ -179,16 +242,20 @@ class TiledImageHandler():
             imagePadded = compositedImage
 
         if imagePadded.mode != "P":
+            logPrint("\tQuantizing...")
+            # TODO : Pick alpha colour based on whether it is not in the image
             imagePadded = imagePadded.quantize(colors=(TiledImageHandler.MAX_COUNT_COLOURS - 1))
-            alphaPalette = TiledImageHandler.COLOUR_ALPHA + imagePadded.getpalette()
+            alphaPalette = TiledImageHandler.COLOUR_ALPHA + purgePaletteList(imagePadded.getpalette())
+            alphaPalette = alphaPalette[0:TiledImageHandler.MAX_COUNT_COLOURS * 3]
             imagePadded = imagePadded.point(lambda c: c + 1)
             imagePadded.putpalette(alphaPalette)
             for alphaPos in alphaFillPixels:
                 imagePadded.putpixel(alphaPos, 0)
         
-        self.paletteContinous = imagePadded.getpalette()
+        self.setPaletteFromList(imagePadded.getpalette())
         
         if useOffset:
+            logPrint("\tFilling with offset data...")
             for tileY in range(height // 8):
                 for tileX in range(width // 8):
                     left = tileX * 8
@@ -198,6 +265,7 @@ class TiledImageHandler():
                     tempTile.setOffset((left, upper))
                     self.tiles.append(tempTile)
         else:
+            logPrint("\tFilling tilemap layout...")
             tileIndex = 0
             # TODO : Verify length of tiles to not exceed selectable amount (not possible?)
             # TODO : Improve detection to find mirrored tiles too
@@ -214,3 +282,5 @@ class TiledImageHandler():
                         self.tiles.append(tempTile)
 
                     tileIndex += 1
+        
+        return (width, height)

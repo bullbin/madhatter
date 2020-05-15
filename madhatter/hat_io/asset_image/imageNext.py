@@ -4,8 +4,8 @@ from .. import binary
 from ...common import Rect
 from ..asset import File, LaytonPack2
 from ..asset_script import LaytonScript
-from math import log, ceil
-from .tiler import Tile, TiledImageHandler
+from math import log
+from .tiler import Tile, TiledImageHandler, getPaletteFromImages
 from .colour import getPaletteAsListFromReader, getPackedColourFromRgb888
 
 def getTransparentLaytonPaletted(inputImage):
@@ -47,7 +47,7 @@ class Animation():
         self.name = ""
         self.keyframes = []
         self.indexSubanimation = None
-        self.keySubanimation = None
+        self.keySubanimation = None     # Only nestled once in LAYTON2
     
     def addKeyframe(self, frame):
         self.keyframes.append(frame)
@@ -68,16 +68,159 @@ class Animation():
         return cycleLength
 
 class AnimatedImage():
+
+    PREFIX_ARC_ATLAS_NAME = "ARC"
+
     def __init__(self):
         self.atlases = {}
         self.frames = []
         self.animations = []
     
-    def debugSave(self):
-        pass
+    def normaliseAnimation(self, animation):
+        # Merge subanimation and animation by looking at subanimation cycle and merging
+        # TODO : getAnimations method which gives this automagically
+        return animation
 
     @staticmethod
     def fromBytesArc(data):
+        output = AnimatedImage()
+        workingAtlas = StaticImage()
+        reader = binary.BinaryReader(data=data)
+
+        countSubImage = reader.readU16()
+        givenBpp = 2 ** (reader.readU16() - 1)
+        print("Frames", countSubImage)
+        print("Bpp", givenBpp)
+
+        tempWorkingImages           = []
+        tempWorkingImageResolutions = []
+
+        for indexImage in range(countSubImage):
+            print("Add Image")
+            resolution = (reader.readU16(), reader.readU16())
+            print("\t", resolution)
+            countTiles = reader.readU32()
+            print("\t", countTiles)
+            workingImage = TiledImageHandler()
+            for _indexTile in range(countTiles):
+                offset = (reader.readU16(), reader.readU16())
+                tileRes = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
+                print("\t",offset,tileRes)
+                workingImage.addTileFromReader(reader, prolongDecoding=True, resolution=tileRes, offset=offset, overrideBpp=givenBpp)
+            tempWorkingImages.append(workingImage)
+            tempWorkingImageResolutions.append(resolution)
+        
+        countColours = reader.readU32()
+        palette = getPaletteAsListFromReader(reader, countColours)
+        atlasKey = AnimatedImage.PREFIX_ARC_ATLAS_NAME + str(len(output.atlases))
+        output.atlases[atlasKey] = workingAtlas
+        for indexImage in range(countSubImage):
+            tempWorkingImages[indexImage].setPaletteFromList(palette, countColours=countColours)
+            workingAtlas.addImage(tempWorkingImages[indexImage].tilesToImage(tempWorkingImageResolutions[indexImage], useOffset=True))
+            workingFrame = AnimationFrame()
+            workingFrame.name = str(indexImage)
+            workingFrame.dimensions = workingAtlas.getImage(indexImage).size
+            workingFrame.imageComponents.append(AnimationFramePartialDetails(output.atlases[atlasKey], indexImage))
+            output.frames.append(workingFrame)
+        
+        reader.seek(30,1)
+        countAnims = reader.readU32()
+        for animIndex in range(countAnims):
+            workingAnim = Animation()
+            workingAnim.setName(reader.readPaddedString(30, 'shift-jis'))
+            output.animations.append(workingAnim)
+        
+        for animIndex in range(countAnims):
+            countFrames = reader.readU32()
+            indexKeyframe = reader.readU32List(countFrames)
+            durationKeyframe = reader.readU32List(countFrames)
+            indexFrame = reader.readU32List(countFrames)
+            orderedKeyframes = {}
+            for indexAnimationKeyframe in range(countFrames):
+                workingKeyframe = AnimationKeyframe()
+                workingFrame.duration = durationKeyframe[indexAnimationKeyframe]
+                workingFrame.indexFrame = indexFrame[indexAnimationKeyframe]
+                orderedKeyframes[indexKeyframe[indexAnimationKeyframe]] = workingKeyframe
+            orderedKeyframeIndices = list(orderedKeyframes.keys())
+            orderedKeyframeIndices.sort()
+            for sortedIndex in orderedKeyframeIndices:
+                output.animations[animIndex].addKeyframe(orderedKeyframes[sortedIndex])
+
+        # No variable or subanimation support yet
+        # Append to atlas using StaticImage as collection of frames
+        
+        return output
+    
+    def toBytesArc(self):
+
+        # Squashes all frames into one ARC. Palette is shared so potential to lose much quality
+
+        images = []
+        for frame in self.frames:
+            images.append(frame.getComposedFrame())
+        
+        if len(images) > 0:
+            palette  = getPaletteFromImages(images)
+
+            packedImages = []
+            packedDimensions = []
+            # Prepare everything
+            for indexImage, image in enumerate(images):
+                workingImage = TiledImageHandler()
+                width, height = workingImage.imageToTiles(image, useOffset=True, usePalette=palette)
+                packedImages.append(workingImage)
+                packedDimensions.append((width,height))
+                # debugImage = workingImage.tilesToImage((width, height), useOffset=True)
+            
+            writer = binary.BinaryWriter()
+            writer.writeU16(len(images))
+
+            encodedBpp = int(log(packedImages[0].getBpp(), 2) + 1)
+            writer.writeU16(encodedBpp)
+
+            for indexImage, image in enumerate(packedImages):
+                width, height = packedDimensions[indexImage]
+                writer.writeU16(width)
+                writer.writeU16(height)
+                writer.writeU32(len(image.getTiles()))
+                for tile in image.getTiles():       # TODO : Optimisation, tiles can be up to 128x128 which can reduce header overhead
+                    offsetX, offsetY = tile.offset
+                    writer.writeU16(offsetX)
+                    writer.writeU16(offsetY)
+                    tileX, tileY = tile.image.size
+                    writer.writeU16(int(log(tileX, 2) - 3))
+                    writer.writeU16(int(log(tileY, 2) - 3))
+                    writer.write(tile.toBytes(packedImages[0].getBpp()))
+            
+            palette = image.getPalette()    # Switch to RGB triplets
+            writer.writeU32(len(palette))
+            for r,g,b in palette:
+                writer.writeU16(getPackedColourFromRgb888(r,g,b))
+
+            writer.pad(30)
+            writer.writeU32(len(self.animations))
+            for anim in self.animations:
+                writer.writePaddedString(anim.name, 30, 'shift-jis')
+
+            # TODO : Fix animation encoding, something isn't right here and its causing only the first frame to be played
+            for anim in self.animations:
+                writer.writeU32(len(anim.keyframes))
+                for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                    writer.writeU32(indexKeyframe)
+                for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                    writer.writeU32(keyframe.duration)
+                for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                    writer.writeU32(keyframe.indexFrame)
+            
+            writer.pad(746) # TODO - Read variables and subanimation
+
+            return writer.data
+        return None
+
+    def toBytesCAni(self):
+        packAnim = LaytonPack2()
+        scriptAnim = LaytonScript()
+
         pass
 
     @staticmethod

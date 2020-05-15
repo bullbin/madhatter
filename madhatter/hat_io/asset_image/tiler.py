@@ -48,6 +48,25 @@ def purgePaletteList(palette):
         output.extend(tempTriplet)
     return output
 
+def getPaletteFromImages(images):
+    # There is a limit in PIL but hopefully this will never be reached
+    countPixels = 0
+    rgbImages = []
+    for image in images:
+        rgbImages.append(image.convert("RGB"))
+        width, height = image.size
+        countPixels += (width * height)
+    colourSlice = Image.new("RGB", (countPixels, 1))
+    colourSliceIndex = 0
+    for image in rgbImages:
+        width, height = image.size
+        for y in range(height):
+            for x in range(width):
+                colourSlice.putpixel((colourSliceIndex,0), image.getpixel((x,y)))
+                colourSliceIndex += 1
+    colourSlice = colourSlice.quantize(colors=TiledImageHandler.MAX_COUNT_COLOURS)
+    return colourSlice.getpalette()
+
 class Tile():
 
     DEFAULT_RESOLUTION  = (8,8)
@@ -115,6 +134,41 @@ class Tile():
     def getImage(self):
         return self.image
 
+class TileProlongedDecode(Tile):
+    def __init__(self):
+        Tile.__init__(self)
+        self.decodingData = b''
+        self.bpp = 0
+        self.needsDecode = True
+    
+    @staticmethod
+    def fromBytes(data, resolution, bpp, palette):
+        output = TileProlongedDecode()
+        output.setImageFromBytes(data, resolution, bpp, palette)
+        return output
+    
+    def setImageFromBytes(self, data, resolution, bpp, palette):
+        self.image = Image.new("P", resolution)
+        self.bpp = bpp
+        self.decodingData = data
+    
+    def decode(self, palette):
+        if self.needsDecode:
+            self.image.putpalette(palette)
+            width, height = self.image.size
+            x = 0
+            y = 0
+            for indexPixel in range(width * height * self.bpp // 8):
+                packedPixel = self.decodingData[indexPixel]
+                for _indexSubPixel in range(8 // self.bpp):
+                    self.image.putpixel((x,y), (packedPixel & ((2 ** self.bpp) - 1)) % (len(palette) // 3))
+                    packedPixel = packedPixel >> self.bpp
+                    x += 1
+                    if x == width:
+                        y += 1
+                        x = 0
+            self.needsDecode = False
+
 class TiledImageHandler():
 
     MAX_COUNT_COLOURS = 250
@@ -173,18 +227,27 @@ class TiledImageHandler():
 
         logPrint("Palette set to", len(self.paletteRgbTriplets))
 
-    def addTileFromReader(self, reader, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET, overrideBpp=-1):
+    def addTileFromReader(self, reader, prolongDecoding=False, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET, overrideBpp=-1):
         if overrideBpp != -1:
             bpp = overrideBpp
         else:
             bpp = self.getBpp()
         dataLength = int(resolution[0] * resolution[1] * bpp / 8)
-        tempTile = Tile.fromBytes(reader.read(dataLength), resolution, bpp, self.paletteContinuous)
+        if prolongDecoding:
+            tempTile = TileProlongedDecode.fromBytes(reader.read(dataLength), resolution, bpp, self.paletteContinuous)
+        else:
+            tempTile = Tile.fromBytes(reader.read(dataLength), resolution, bpp, self.paletteContinuous)
         tempTile.setGlb(glb)
         tempTile.setOffset(offset)
         self.tiles.append(tempTile)
     
+    def decodeProlongedTiles(self):
+        for tile in self.getTiles():
+            if type(tile) == TileProlongedDecode:
+                tile.decode(self.paletteContinuous)
+ 
     def tilesToImage(self, resolution, useOffset = False):
+        self.decodeProlongedTiles()
         width, height = resolution
         output = Image.new("P", resolution)
         output.putpalette(self.paletteContinuous)
@@ -214,7 +277,7 @@ class TiledImageHandler():
                     output.paste(tileFocus.getImage(), (x * 8, y * 8))
         return output
     
-    def imageToTiles(self, image, useOffset=False):
+    def imageToTiles(self, image, useOffset=False, usePalette=[]):
         # TODO : Extend palette, change palette, etc
         logPrint("Called to convert!")
         logPrint("\tInput:", image.mode)
@@ -236,7 +299,7 @@ class TiledImageHandler():
                     if a >= 0.5:
                         compositedImage.putpixel((x,y), (r,g,b))
                     else:
-                        compositedImage.putpixel((x,y), blurredImage.getpixel(x,y))
+                        compositedImage.putpixel((x,y), blurredImage.getpixel((x,y)))
                         alphaFillPixels.append((x,y))
 
             imagePadded = compositedImage
@@ -244,7 +307,10 @@ class TiledImageHandler():
         if imagePadded.mode != "P":
             logPrint("\tQuantizing...")
             # TODO : Pick alpha colour based on whether it is not in the image
-            imagePadded = imagePadded.quantize(colors=(TiledImageHandler.MAX_COUNT_COLOURS - 1))
+            if usePalette != []:
+                imagePadded = imagePadded.quantize(colors=(TiledImageHandler.MAX_COUNT_COLOURS - 1))
+            else:
+                imagePadded = imagePadded.quantize(palette=usePalette)
             alphaPalette = TiledImageHandler.COLOUR_ALPHA + purgePaletteList(imagePadded.getpalette())
             alphaPalette = alphaPalette[0:TiledImageHandler.MAX_COUNT_COLOURS * 3]
             imagePadded = imagePadded.point(lambda c: c + 1)

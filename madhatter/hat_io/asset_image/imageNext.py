@@ -2,6 +2,7 @@ from PIL import Image
 from .imageOpcodes import *
 from .. import binary
 from ...common import Rect
+from ...common import log as logPrint
 from ..asset import File, LaytonPack2
 from ..asset_script import LaytonScript
 from math import log
@@ -89,23 +90,23 @@ class AnimatedImage():
 
         countSubImage = reader.readU16()
         givenBpp = 2 ** (reader.readU16() - 1)
-        print("Frames", countSubImage)
-        print("Bpp", givenBpp)
+        logPrint("Frames", countSubImage)
+        logPrint("Bpp", givenBpp)
 
         tempWorkingImages           = []
         tempWorkingImageResolutions = []
 
         for indexImage in range(countSubImage):
-            print("Add Image")
+            logPrint("Add Image")
             resolution = (reader.readU16(), reader.readU16())
-            print("\t", resolution)
+            logPrint("\t", resolution)
             countTiles = reader.readU32()
-            print("\t", countTiles)
+            logPrint("\t", countTiles)
             workingImage = TiledImageHandler()
             for _indexTile in range(countTiles):
                 offset = (reader.readU16(), reader.readU16())
                 tileRes = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
-                print("\t",offset,tileRes)
+                logPrint("\t",offset,tileRes)
                 workingImage.addTileFromReader(reader, prolongDecoding=True, resolution=tileRes, offset=offset, overrideBpp=givenBpp)
             tempWorkingImages.append(workingImage)
             tempWorkingImageResolutions.append(resolution)

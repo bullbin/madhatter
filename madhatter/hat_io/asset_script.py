@@ -1,5 +1,8 @@
 from . import binary
+from .const import ENCODING_DEFAULT_STRING
 from .asset import File
+
+# TODO - Restructure this to fetch instructions instead of prepopulate (less intensive)
 
 class Operand():
     def __init__(self, operandType, operandValue):
@@ -52,7 +55,7 @@ class LaytonScript(File):
             reader.seek(offsetString)
             while reader.hasDataRemaining():
                 index = reader.tell() - offsetString
-                bankString[index] = reader.readNullTerminatedString('shift-jis')
+                bankString[index] = reader.readNullTerminatedString(ENCODING_DEFAULT_STRING)
                 reader.seek(1,1)
             return bankString
         

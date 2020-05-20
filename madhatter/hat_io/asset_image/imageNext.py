@@ -1,5 +1,5 @@
 from PIL import Image
-from .imageOpcodes import *
+from .opcodes import *
 from .. import binary
 from ...common import Rect
 from ...common import log as logPrint
@@ -8,6 +8,9 @@ from ..asset_script import LaytonScript
 from math import log
 from .tiler import Tile, TiledImageHandler, getPaletteFromImages
 from .colour import getPaletteAsListFromReader, getPackedColourFromRgb888
+from ..const import ENCODING_DEFAULT_STRING
+
+# TODO - Split animation into own submodule
 
 def getTransparentLaytonPaletted(inputImage):
     output = inputImage.copy().convert("RGBA")
@@ -128,7 +131,7 @@ class AnimatedImage():
         countAnims = reader.readU32()
         for animIndex in range(countAnims):
             workingAnim = Animation()
-            workingAnim.setName(reader.readPaddedString(30, 'shift-jis'))
+            workingAnim.setName(reader.readPaddedString(30, ENCODING_DEFAULT_STRING))
             output.animations.append(workingAnim)
         
         for animIndex in range(countAnims):
@@ -201,7 +204,7 @@ class AnimatedImage():
             writer.pad(30)
             writer.writeU32(len(self.animations))
             for anim in self.animations:
-                writer.writePaddedString(anim.name, 30, 'shift-jis')
+                writer.writePaddedString(anim.name, 30, ENCODING_DEFAULT_STRING)
 
             # TODO : Fix animation encoding, something isn't right here and its causing only the first frame to be played
             for anim in self.animations:

@@ -1,6 +1,8 @@
 from . import binary
 from .asset import File
 
+# TODO - Rewrite this
+
 class Boundary():
     def __init__(self, cornerPos, boundarySize):
         self.posCorner = cornerPos

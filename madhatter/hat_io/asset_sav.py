@@ -1,6 +1,6 @@
 from . import binary
 from .asset import File
-
+from .const import ENCODING_DEFAULT_STRING
 from math import ceil
 
 def calculateSaveChecksumFromBuffer(buffer, saveDataOffset, length):
@@ -558,7 +558,7 @@ class Layton2SaveSlot():
         self.storyItemFlag          = FlagsAsArray.fromBytes(reader.read(1), maxLength=8)
         self.menuNewFlag            = FlagsAsArray.fromBytes(reader.read(2), maxLength=16)
         self.minigameTeaState.setCorrectFromBytes(reader.read(3))
-        self.minigameHamsterState.setName(reader.readPaddedString(20, 'shift-jis'))
+        self.minigameHamsterState.setName(reader.readPaddedString(20, ENCODING_DEFAULT_STRING))
 
         self.photoPieceFlag         = FlagsAsArray.fromBytes(reader.read(2))
         self.tutorialFlag           = FlagsAsArray.fromBytes(reader.read(2))
@@ -630,7 +630,7 @@ class Layton2SaveSlot():
             data.write(self.storyItemFlag.toBytes(outLength=1))
             data.write(self.menuNewFlag.toBytes(outLength=2))
             data.write(self.minigameTeaState.getCorrectBytes())
-            data.writePaddedString(self.minigameHamsterState.getNameData(), 20, 'shift-jis')
+            data.writePaddedString(self.minigameHamsterState.getNameData(), 20, ENCODING_DEFAULT_STRING)
             data.write(self.photoPieceFlag.toBytes(outLength=2))
             data.write(self.tutorialFlag.toBytes(outLength=2))
 
@@ -700,7 +700,7 @@ class Layton2SaveFile(File):
 
     def load(self, data):
         reader = binary.BinaryReader(data=data)
-        if reader.readPaddedString(16, 'shift-jis') == "ATAMFIREBELLNY":
+        if reader.readPaddedString(16, ENCODING_DEFAULT_STRING) == "ATAMFIREBELLNY":
             isTampered = reader.readU32() != calculateSaveChecksumFromData(reader.read(196))
             reader.seek(20)
 
@@ -711,7 +711,7 @@ class Layton2SaveFile(File):
                 self.getSlotData(slotId).isActive = (activeSlots & (2 ** slotId)) != 0
                 if self.getSlotData(slotId).isActive:
                     self.getSlotData(slotId).isTampered = isTampered
-                    self.getSlotData(slotId).name = reader.readPaddedString(20, 'shift-jis')
+                    self.getSlotData(slotId).name = reader.readPaddedString(20, ENCODING_DEFAULT_STRING)
                     self.getSlotData(slotId).headerRoomIndex = reader.readUInt(1)
                     reader.seek(23,1)   # Bleed from string data, doesn't contain anything relevant
                     self.getSlotData(slotId).headerTimeElapsed = reader.readU32()
@@ -742,7 +742,7 @@ class Layton2SaveFile(File):
             header = binary.BinaryWriter()
             header.writeInt(isSaveActive, 4)
             for saveSlot in self._slots:
-                header.writePaddedString(saveSlot.name, 20, 'shift-jis')
+                header.writePaddedString(saveSlot.name, 20, ENCODING_DEFAULT_STRING)
                 header.writeInt(saveSlot.roomIndex, 1)
                 header.pad(23)  # Something triggers game to write string data to this instead
                 header.writeInt(saveSlot.timeElapsed, 4)

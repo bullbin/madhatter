@@ -3,6 +3,7 @@ from functools import partial
 from os import remove, rename, makedirs
 from . import binary
 from ..common import log, logSevere
+from .const import ENCODING_DEFAULT_STRING
 
 class _HuffmanCompressionNode():
     def __init__(self, parent=None, left=None, right=None, weight=0, data=None):
@@ -398,7 +399,7 @@ class LaytonPack(Archive):
             reader.seek(offsetHeader)
             while reader.tell() != lengthArchive:
                 metadata = reader.readU32List(4)
-                self.files.append(File(name = reader.readPaddedString(metadata[0] - LaytonPack.METADATA_BLOCK_SIZE, encoding = 'shift-jis'),
+                self.files.append(File(name = reader.readPaddedString(metadata[0] - LaytonPack.METADATA_BLOCK_SIZE, encoding = ENCODING_DEFAULT_STRING),
                                        data = reader.read(metadata[3])))
                 reader.seek(metadata[1] - (metadata[3] + metadata[0]), 1)
             return True
@@ -415,7 +416,7 @@ class LaytonPack(Archive):
         for fileChunk in self.files:
             header = binary.BinaryWriter()
             data = binary.BinaryWriter()
-            data.writeString(fileChunk.name, 'shift-jis')
+            data.writeString(fileChunk.name, ENCODING_DEFAULT_STRING)
             data.align(4)
             header.writeU32(data.tell() + LaytonPack.METADATA_BLOCK_SIZE)
             data.write(fileChunk.data)
@@ -451,7 +452,7 @@ class LaytonPack2(Archive):
                 fileLengthData = reader.readU32()
 
                 reader.seek(offsetName + fileOffsetName)
-                tempName = reader.readNullTerminatedString('shift-jis')
+                tempName = reader.readNullTerminatedString(ENCODING_DEFAULT_STRING)
                 reader.seek(offsetFile + fileOffsetData)
                 tempData = reader.read(fileLengthData)
                 self.files.append(File(tempName, data=tempData))
@@ -469,7 +470,7 @@ class LaytonPack2(Archive):
             metadata.writeU32(sectionData.tell())
             metadata.writeU32(len(fileChunk.data))
 
-            sectionName.writeString(fileChunk.name, 'shift-jis')
+            sectionName.writeString(fileChunk.name, ENCODING_DEFAULT_STRING)
             if fileIndex < len(self.files):
                 sectionName.write(b'\x00')
 

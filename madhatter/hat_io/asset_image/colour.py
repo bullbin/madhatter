@@ -1,4 +1,4 @@
-from .imageConst import IMAGE_FORCE_FULL_RANGE_COLOUR
+from .const import IMAGE_FORCE_FULL_RANGE_COLOUR
 
 def getPackedColourFromRgb888(r, g, b):
     if IMAGE_FORCE_FULL_RANGE_COLOUR:

@@ -185,7 +185,7 @@ class HandlerTeaState():
     def __init__(self):
         self.flagElements   = FlagsAsArray(8)
         self.flagRecipes    = FlagsAsArray(12)
-        self.flagCorrecct   = FlagsAsArray(24)
+        self.flagCorrect   = FlagsAsArray(24)
     
     def setElementsFromBytes(self, data):
         self.flagElements = FlagsAsArray.fromBytes(data, maxLength=8)
@@ -194,7 +194,7 @@ class HandlerTeaState():
         self.flagRecipes = FlagsAsArray.fromBytes(data, maxLength=12)
     
     def setCorrectFromBytes(self, data):
-        self.flagCorrecct = FlagsAsArray.fromBytes(data, maxLength=24)
+        self.flagCorrect = FlagsAsArray.fromBytes(data, maxLength=24)
     
     def getElementsBytes(self):
         return self.flagElements.toBytes(outLength=1)
@@ -203,7 +203,7 @@ class HandlerTeaState():
         return self.flagRecipes.toBytes(outLength=2)
     
     def getCorrectBytes(self):
-        return self.flagCorrecct.toBytes(outLength=3)
+        return self.flagCorrect.toBytes(outLength=3)
 
 class HandlerMysteryState(EnableNewFlagState):
     def __init__(self):

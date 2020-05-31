@@ -470,6 +470,7 @@ class Layton2SaveSlot():
 
         self.eventViewed            = FlagsAsArray(1024)
         self.storyFlag              = FlagsAsArray(128)
+        self.eventCounter           = FlagsAsArray(1024)
 
         self.headerPuzzleCountSolved        = 0
         self.headerPuzzleCountEncountered   = 0
@@ -480,12 +481,12 @@ class Layton2SaveSlot():
         self.roomHintData           = RoomHintState()
         self.hintCoinEncountered    = 10 # Regen these
         self.hintCoinAvailable      = 10
-        self.picarots               = 0
+        self.picarats               = 0
         
         self.roomIndex              = 1
         self.roomSubIndex           = 1
         self.timeElapsed            = 0
-        self.introEventIndex        = 0
+        self.chapter                = 0
         self.minigameTeaState       = HandlerTeaState()
         self.minigameHamsterState   = HandlerHamsterState()
         self.minigameCameraState    = HandlerCameraState()
@@ -513,27 +514,20 @@ class Layton2SaveSlot():
         reader.seek(4)
         self.eventViewed = FlagsAsArray.fromBytes(reader.read(128))  # Something AutoEvent related, triggered whenever an AutoEvent plays
         self.storyFlag = FlagsAsArray.fromBytes(reader.read(16))
-
-        reader.seek(24,1)
-
-        self.photoState.setCountRemaining(reader.readUInt(1))
-
-        reader.seek(103,1)
+        self.eventCounter = FlagsAsArray.fromBytes(reader.read(128))
 
         self.puzzleData.setPuzzleBankFromBytes(reader.read(216))
         self.roomHintData.setFromBytes(reader.read(64))
         self.hintCoinAvailable      = reader.readU16()
         self.hintCoinEncountered    = reader.readU16()
-        self.picarots               = reader.readU32()
-        self.introEventIndex        = reader.readU32()
+        self.picarats               = reader.readU32()
+        self.chapter                = reader.readU32()
         self.roomIndex              = reader.readU32()
         self.roomSubIndex           = reader.readU32()
 
         reader.seek(4,1)
         
-        self.timeElapsed            = reader.readU32()
-
-        reader.seek(4,1)
+        self.timeElapsed            = reader.readUInt(8)
 
         self.minigameCameraState.setCameraAvailableFlags(reader.read(2))    # CameraSolved
         self.minigameCameraState.setCameraPiecesData(reader.read(20))
@@ -584,29 +578,21 @@ class Layton2SaveSlot():
 
             data.write(self.eventViewed.toBytes(outLength=128))
             data.write(self.storyFlag.toBytes(outLength=16))
-
-            data.pad(24, padChar=b'\x00')
-
-            data.writeInt(self.photoState.getCountRemainingData(), 1)
-
-            data.pad(103, padChar=b'\x00')
+            data.write(self.eventCounter.toBytes(outLength=128))
             
             # TODO - Validate this
             data.write(self.puzzleData.getPuzzleBankBytes())
             data.write(self.roomHintData.getHintDataBytes())
             data.writeU16(self.hintCoinAvailable)
             data.writeU16(self.hintCoinEncountered)
-            data.writeU32(self.picarots)
-            data.writeU32(self.introEventIndex)
+            data.writeU32(self.picarats)
+            data.writeU32(self.chapter)
             data.writeU32(self.roomIndex)
             data.writeU32(self.roomSubIndex)
 
             data.pad(4, padChar=b'\x00')
 
-            data.writeU32(self.timeElapsed)
-            
-            data.pad(4, padChar = b'\x00')
-
+            data.writeInt(self.timeElapsed, 8)
             data.write(self.minigameCameraState.getCameraAvailableBytes())
             data.write(self.minigameCameraState.getCameraPiecesBytes())
 

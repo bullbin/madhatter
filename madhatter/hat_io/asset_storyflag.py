@@ -1,7 +1,7 @@
 from .asset import File
 from .binary import BinaryReader, BinaryWriter
 
-# TODO - Why is this used?
+# Used to update current chapter by checking if puzzle was solved or flag was set
 
 class Flag():
     def __init__(self, type = 0, param = 0):
@@ -46,7 +46,7 @@ class StoryFlag(File):
         self.flagGroups = []
         for _nullGroup in range(StoryFlag.COUNT_FLAGS):
             self.flagGroups.append(FlagGroup())
-    
+
     def load(self, data):
         reader = BinaryReader(data=data)
 

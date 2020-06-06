@@ -149,3 +149,6 @@ class GdScript(Script):
                 pass
             elif lastType in [6,7]: # Offset
                 command.operands.append(Operand(lastType, reader.readS32()))
+
+        if command != None: # Bugfix where last command missing
+            self.commands.append(command)

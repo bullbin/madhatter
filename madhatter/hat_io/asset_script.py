@@ -1,6 +1,7 @@
 from . import binary
-from .const import ENCODING_DEFAULT_STRING
+from .const import ENCODING_DEFAULT_STRING, ENCODING_LAYTON_3_STRING
 from .asset import File
+# TODO - Use const enums for operand type
 
 class Operand():
     def __init__(self, operandType, operandValue):
@@ -58,6 +59,12 @@ class Script(File):
             return self.commands[index]
         return None
 
+    def addInstruction(self, instruction):
+        if instruction.opcode != None:
+            self.commands.append(instruction)
+            return True
+        return False
+
     def __str__(self):
         output = ""
         for operation in self.commands:
@@ -75,7 +82,7 @@ class LaytonScript(Script):
             reader.seek(offsetString)
             while reader.hasDataRemaining():
                 index = reader.tell() - offsetString
-                bankString[index] = reader.readNullTerminatedString(ENCODING_DEFAULT_STRING)
+                bankString[index] = reader.readNullTerminatedString(ENCODING_LAYTON_3_STRING)
                 reader.seek(1,1)
             return bankString
         

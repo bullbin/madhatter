@@ -11,6 +11,7 @@ from .colour import getPaletteAsListFromReader, getPackedColourFromRgb888
 from ..const import ENCODING_DEFAULT_STRING
 
 # TODO - Split animation into own submodule
+# TODO - With LT3 images, the encoding is different which could result in bad characters moving to LT2
 
 def getTransparentLaytonPaletted(inputImage):
     output = inputImage.copy().convert("RGBA")

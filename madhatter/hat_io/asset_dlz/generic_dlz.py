@@ -33,6 +33,7 @@ class DlzData(File):
         reader = BinaryReader(data=data)
         countEntries = reader.readU16()
         if reader.readU16() == DlzData.MAGIC_VERSION:
+            # TODO : This is actually the read offset
             self.lengthEntry = reader.readU16()
             for indexEntry in range(self.lengthEntry):
                 self.addEntryFromData(reader.read(self.lengthEntry))

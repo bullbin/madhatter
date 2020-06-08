@@ -15,3 +15,8 @@ class GenericLoadScreenImage(Action):        # TopScreen = LoadSubBg
             self.idScreen = ID_BOTTOM_SCREEN
             logSevere("GenericLoadScreenImage: Invalid screen ID specified! Defaulting to bottom screen.")
         self.layer = layer
+
+class GenericWait(Action):
+    def __init__(self, durationMilliseconds):
+        Action.__init__(self)
+        self.duration = durationMilliseconds

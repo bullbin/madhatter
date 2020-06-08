@@ -1,0 +1,2 @@
+SOLVED_BY_LAYTON    = 0
+SOLVED_BY_LUKE      = 1

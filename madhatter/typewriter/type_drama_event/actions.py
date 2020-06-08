@@ -12,11 +12,6 @@ class DramaActionFade(Action):
             logSevere("DramaActionError: Unknown fade mode, defaulting to fade in!")
         self.duration = durationMilliseconds
 
-class DramaActionWait(Action):
-    def __init__(self, durationMilliseconds):
-        Action.__init__(self)
-        self.duration = durationMilliseconds
-
 class DramaActionTalk(Action):
     def __init__(self, text):
         Action.__init__(self)

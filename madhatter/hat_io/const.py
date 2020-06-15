@@ -3,6 +3,11 @@ from enum import Enum
 ENCODING_DEFAULT_STRING     = 'utf-8'
 ENCODING_LAYTON_3_STRING    = 'cp932'
 
+DICT_BOOLEAN_TO_PYTHON = {"false"   :False,
+                          "true"    :True}
+DICT_PYTHON_TO_BOOLEAN = {False:    "false",
+                          True      :"true"}
+
 class TYPE_OPERANDS(Enum):
     INT_SIGNED  = 1
     FLOAT       = 2

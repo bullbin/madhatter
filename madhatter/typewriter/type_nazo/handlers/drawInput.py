@@ -2,6 +2,9 @@ from .common import PuzzleHandler
 from ...stringsLt2 import OPCODES_LT2
 
 def HandlerWriteAnswer(PuzzleHandler):
+
+    LAYTON_1_COMMAND_STRING = "Draw Input2"
+
     def __init__(self):
         PuzzleHandler.__init__(self)
 

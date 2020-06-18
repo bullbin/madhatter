@@ -502,7 +502,7 @@ class Layton2SaveSlot():
         self.anthonyDiaryState      = EnableNewFlagState(12)
         self.idImmediateEvent       = -1
 
-        self.objective = 100
+        self.goal = 100
     
     def clear(self):
         self = Layton2SaveSlot()
@@ -564,7 +564,7 @@ class Layton2SaveSlot():
 
         reader.seek(4,1)
 
-        self.objective              = reader.readU32()
+        self.goal                   = reader.readU32()
 
         if self.roomIndex != self.headerRoomIndex:
             self.isTampered = True
@@ -628,7 +628,7 @@ class Layton2SaveSlot():
 
             data.pad(4, padChar = b'\x00')
 
-            data.writeInt(self.objective, 4)
+            data.writeInt(self.goal, 4)
 
             writer.writeU32(calculateSaveChecksumFromData(data.data))
             writer.write(data.data)

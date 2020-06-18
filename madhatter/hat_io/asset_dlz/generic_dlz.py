@@ -1,6 +1,8 @@
 from ..asset import File
 from ..binary import BinaryReader, BinaryWriter
 
+# TODO - Some dlzs probably require sorting of values
+
 class DlzEntryNull():
     @staticmethod
     def fromBytes(data):
@@ -22,7 +24,7 @@ class DlzEntry(DlzEntryNull):
 
 class DlzData(File):
 
-    MAGIC_VERSION = 8
+    ENTRY_OFFSET = 8
 
     def __init__(self):
         File.__init__(self)
@@ -32,10 +34,10 @@ class DlzData(File):
     def load(self, data):
         reader = BinaryReader(data=data)
         countEntries = reader.readU16()
-        if reader.readU16() == DlzData.MAGIC_VERSION:
-            # TODO : This is actually the read offset
-            self.lengthEntry = reader.readU16()
-            for indexEntry in range(self.lengthEntry):
+        if reader.readU16() == DlzData.ENTRY_OFFSET:
+            self.lengthEntry = reader.readU32()
+            reader.seek(DlzData.ENTRY_OFFSET)
+            for indexEntry in range(countEntries):
                 self.addEntryFromData(reader.read(self.lengthEntry))
     
     def save(self):
@@ -67,4 +69,13 @@ class DlzData(File):
     def getEntry(self, indexEntry):
         if 0 <= indexEntry < self.getCountEntries():
             return self._entries[indexEntry]
+        return None
+    
+    def removeEntry(self, indexEntry):
+        if 0 <= indexEntry < self.getCountEntries():
+            del self._entries[indexEntry]
+            return True
+        return False
+    
+    def searchForEntry(self, key):
         return None

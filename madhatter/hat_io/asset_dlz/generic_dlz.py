@@ -2,6 +2,7 @@ from ..asset import File
 from ..binary import BinaryReader, BinaryWriter
 
 # TODO - Some dlzs probably require sorting of values
+# TODO - Encoding mismatch, ev_str still requires cp932 support
 
 class DlzEntryNull():
     @staticmethod

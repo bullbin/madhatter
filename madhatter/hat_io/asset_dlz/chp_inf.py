@@ -9,6 +9,7 @@ class DlzEntryChapterInfo(DlzEntryNull):
     LENGTH_ENTRY = 8
 
     def __init__(self, chapter, idEvent, indexEventViewedFlag, idEventAlt):
+        DlzEntryNull.__init__(self)
         self.chapter                = chapter
         self.idEvent                = idEvent
         self.indexEventViewedFlag   = indexEventViewedFlag

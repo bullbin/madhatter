@@ -701,8 +701,11 @@ class Layton2SaveFile(File):
                     self.getSlotData(slotId).headerRoomIndex = reader.readUInt(1)
                     reader.seek(23,1)   # Bleed from string data, doesn't contain anything relevant
                     self.getSlotData(slotId).headerTimeElapsed = reader.readU32()
+                    
+                    # Is this the right way round?
                     self.getSlotData(slotId).headerPuzzleCountSolved = reader.readU16()
                     self.getSlotData(slotId).headerPuzzleCountEncountered = reader.readU16()
+
                     self.getSlotData(slotId).isComplete = (reader.readUInt(1) == 1)
                     reader.seek(11,1)   # Unused?
                 else:

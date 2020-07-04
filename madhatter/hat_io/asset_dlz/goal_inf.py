@@ -10,6 +10,7 @@ class DlzEntryGoalInfo(DlzEntryNull):
     LENGTH_ENTRY = 6
 
     def __init__(self, idEvent, type, goal):
+        DlzEntryNull.__init__(self)
         if 0 <= type <= 1:
             self.type       = type
         else:

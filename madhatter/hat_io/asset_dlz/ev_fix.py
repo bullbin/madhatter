@@ -13,6 +13,7 @@ class DlzEntryEvFix(DlzEntryNull):
     LENGTH_ENTRY = 6
 
     def __init__(self, idEvent, indexPuzzle, indexEventViewedFlag):
+        DlzEntryNull.__init__(self)
         self.idEvent                = idEvent
         self.indexPuzzle            = indexPuzzle
         self.indexEventViewedFlag   = indexEventViewedFlag
@@ -54,6 +55,4 @@ class EventBaseList(DlzData):
     def searchForEntry(self, idEvent):
         if idEvent in self._eventLookup:
             return self._eventLookup[idEvent]
-        else:
-            print(self._eventLookup)
         return None

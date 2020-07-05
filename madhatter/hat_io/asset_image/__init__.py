@@ -1,1 +1,1 @@
-from .imageNext import *
+from .image import *

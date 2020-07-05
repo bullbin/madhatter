@@ -1,436 +1,454 @@
-import math
-from math import ceil, log
 from PIL import Image
-from os import path
-
+from .opcodes import *
 from .. import binary
-from ..asset import File
-from ...common import log as debugPrint
+from ...common import Rect
+from ...common import log as logPrint
+from ..asset import File, LaytonPack2
+from ..asset_script import LaytonScript
+from math import log
+from .tiler import Tile, TiledImageHandler, getPaletteFromImages
+from .colour import getPaletteAsListFromReader, getPackedColourFromRgb888
+from ..const import ENCODING_DEFAULT_STRING
 
-EXPORT_EXTENSION = "png"
-EXPORT_WITH_ALPHA = True    # Not recommended for in-engine as masking is faster
-EXPORT_EXPANDED_COLOUR = True
+# TODO - Split animation into own submodule
+# TODO - With LT3 images, the encoding is different which could result in bad characters moving to LT2
 
-def pilPaletteToRgbTriplets(image):
-    paletteData = image.getpalette()
-    output = []
-    for rgbTriplet in range(256):
-        output.append((paletteData[rgbTriplet * 3], paletteData[rgbTriplet * 3 + 1], paletteData[rgbTriplet * 3 + 2]))
+def getTransparentLaytonPaletted(inputImage):
+    output = inputImage.copy().convert("RGBA")
+    width, height = inputImage.size
+    for y in range(height):
+        for x in range(width):
+            if inputImage.getpixel((x,y)) == 0:
+                output.putpixel((x,y), (0,0,0,0))
     return output
 
-def countPilPaletteColours(image):
-    lastColour = None
-    for indexColour, colour in enumerate(pilPaletteToRgbTriplets(image)):
-        if lastColour == colour:
-            return indexColour
-        lastColour = colour
-    return 256
+class AnimationFramePartialDetails():
+    def __init__(self, atlasImage, atlasSubImageIndex):
+        self.atlasImageReference = atlasImage
+        self.atlasSubImageIndex  = atlasSubImageIndex
+        self.pos                 = (0,0)
 
-class Colour():
-    def __init__(self, r = 1, g = 1, b = 1):
-        self.r, self.g, self.b = r, g, b
-    
-    @staticmethod
-    def fromInt(encodedColour):
-        colourOut = Colour()
-        colourOut.b = ((encodedColour >> 10) & 0x1f) / 31
-        colourOut.g = ((encodedColour >> 5) & 0x1f) / 31
-        colourOut.r = (encodedColour & 0x1f) / 31
-        return colourOut
-    
-    def toList(self):
-        if EXPORT_EXPANDED_COLOUR:
-            return ([int(self.r * 255), int(self.g * 255), int(self.b * 255)])
-        return ([int(self.r * 248), int(self.g * 248), int(self.b * 248)])
-
-class ImageVariable():
-    def __init__(self, name):
-        self.name = name
-        self.data = []
-    
-    def addData(self, data):
-        if len(self.data) == 8:
-            return False
-        self.data.append(data)
-        return True
-
-class Tile():
-    def __init__(self, data=None):
-        self.data = data
-        self.glb = (0,0)
-        self.offset = (0,0)
-        self.res = (8,8)
-    
-    def fetchData(self, reader, bpp):
-        self.offset = (reader.readU16(), reader.readU16())
-        self.res = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
-        self.data = reader.read(int(bpp / 8 * self.res[0] * self.res[1]))
-
-    def decodeToPil(self, palette, bpp):
-        image = Image.new("P", self.res)
-        image.putpalette(palette)
-        pixelY = -1
-        for indexPixel in range(int(self.res[0] * self.res[1] * (bpp/8))):
-            pixelByte = self.data[indexPixel]
-            if indexPixel % int(self.res[0] * bpp/8) == 0:
-                pixelY += 1
-                pixelX = 0
-            for _indexSubPixel in range(int(1/(bpp/8))):
-                image.putpixel((pixelX, pixelY), (pixelByte & ((2**bpp) - 1)) % (len(palette) // 3))
-                pixelByte = pixelByte >> bpp
-                pixelX += 1
-        return image
-    
-    def decodeToPilArj(self, palette, bpp):
-        image = Image.new("P", self.res)
-        image.putpalette(palette)
-        pixelIndex = 0
-        for ht in range(self.res[1] // 8):
-            for wt in range(self.res[0] // 8):
-                for h in range(8):
-                    for w in range(8):
-                        if bpp == 4:
-                            pixelByte = self.data[pixelIndex // 2]
-                            if pixelIndex % 2 == 1:
-                                pixelByte = pixelByte >> bpp
-                            pixelByte = pixelByte & ((2**bpp) - 1)
-                        else:
-                            pixelByte = self.data[pixelIndex]
-                        image.putpixel((w + wt * 8, h + ht * 8), pixelByte % (len(palette) // 3))
-                        pixelIndex += 1
-        return image
-
-class TiledImage():
-    def __init__(self, res=(0,0)):
-        self.res = res
-        self.tiles = []
-    
-    def getPilConstructedImage(self, palette, bpp, isArj):
-        # TODO : Fill with transparency
-        outputImage = Image.new('P', self.res)
-        outputImage.putpalette(palette)
-        for tile in self.tiles:
-            if isArj:
-                outputImage.paste(tile.decodeToPilArj(palette, bpp), box=tile.offset)
-            else:
-                outputImage.paste(tile.decodeToPil(palette, bpp), box=tile.offset)
-        return outputImage
-
-class AnimationBasicSequence():
+class AnimationFrame():
     def __init__(self):
-        self.indexFrames = []
-        self.frameDuration = []
-        self.indexImages = []
-        self.name = "Create an Animation"
-        self.offsetFace = (0,0)
-        self.indexAnimFace = 0
-    def __str__(self):
-        return "Animation Details\nName:\t" + self.name + "\nFrmIdx:\t" + str(self.indexFrames) + "\nImgIdx:\t" + str(self.indexImages) + "\nUnkFrm:\t" + str(self.frameDuration) + "\n"
+        self.name = ""
+        self.dimensions = (0,0)
+        self.imageComponents = []
 
-class LaytonAnimatedImage(File):
-    def __init__(self):
-        File.__init__(self)
-        self.images = []
-        self.anims = []
-        self.alphaMask = None
-
-        self.variableName = ""
-        self.variables = []
-        for indexVar in range(16):
-            self.variables.append(ImageVariable("Var" + str(indexVar + 1)))
-    
-    def load(self, data, isArj=False):
-        reader = binary.BinaryReader(data = data)
-        
-        countImages = reader.readU16()
-        bpp = 2 ** (reader.readU16() - 1)
-        if isArj:
-            countColours = reader.readU32()
-
-        for indexImage in range(countImages):
-            self.images.append(TiledImage(res=(reader.readU16(), reader.readU16())))
-            imageCountTiles = reader.readU32()
-            for indexTile in range(imageCountTiles):
-                self.images[indexImage].tiles.append(Tile())
-                if isArj:
-                    self.images[indexImage].tiles[indexTile].glb = (reader.readU16(), reader.readU16())
-                self.images[indexImage].tiles[indexTile].fetchData(reader, bpp)
-        
-        if not(isArj):
-            countColours = reader.readU32()
-
-        palette = self.getPaletteAndAnimations(reader, countColours)
-
-        # Variable-space
-        if reader.hasDataRemaining():
-            unk = reader.read(2)
-            if unk != b'\x34\x12':
-                log("Variable magic failed, still reading forwards...")
-
-            self.variables      = []
-            for _indexVar in range(16):
-                self.variables.append(ImageVariable(reader.readPaddedString(16, 'shift-jis')))
-            for _indexData in range(8):
-                for indexVar in range(16):
-                    self.variables[indexVar].addData(reader.readS16())
-
-            tempDimensions = [[],[]]
-            for indexDimension in range(2):
-                for _indexPos in range(len(self.anims)):
-                    tempDimensions[indexDimension].append(reader.readU16())
-            for indexAnim in range(len(self.anims)):
-                self.anims[indexAnim].offsetFace = (tempDimensions[0][indexAnim], tempDimensions[1][indexAnim])
-                self.anims[indexAnim].indexAnimFace = reader.readUInt(1)
-            self.variableName = reader.readPaddedString(128, 'shift-jis')
-            if reader.hasDataRemaining():
-                log("Did not reach end of image file!")
-            
-        for indexImage, image in enumerate(self.images):
-            self.images[indexImage] = image.getPilConstructedImage(palette, bpp, isArj)
-            
-    def getPaletteAndAnimations(self, reader, countColours):
-        palette = []
-        if countColours > 1:
-            self.alphaMask = Colour.fromInt(reader.readU16()).toList()
-            countColours -= 1
-            palette.extend(self.alphaMask)
-        for _indexColour in range(countColours):
-            palette.extend(Colour.fromInt(reader.readU16()).toList())
-        
-        reader.seek(30, 1)
-        countAnims = reader.readU32()
-        for indexAnim in range(countAnims):
-            self.anims.append(AnimationBasicSequence())
-            tempName = ((reader.read(30)).decode("ascii")).split("\x00")[0]
-
-            nameCorrection = ""
-            for nameCorrectionSection in tempName.split(" "):
-                if len(nameCorrectionSection) > 0:
-                    if len(nameCorrection) == 0:
-                        nameCorrection = nameCorrectionSection
-                    else:
-                        nameCorrection = nameCorrection + " " + nameCorrectionSection
-            self.anims[indexAnim].name = nameCorrection
-
-        for indexAnim in range(countAnims):
-            countFrames = reader.readU32()
-            for _indexFrame in range(countFrames):
-                self.anims[indexAnim].indexFrames.append(reader.readU32())
-            for _indexFrame in range(countFrames):
-                self.anims[indexAnim].frameDuration.append(reader.readU32())
-            for _indexFrame in range(countFrames):
-                self.anims[indexAnim].indexImages.append(reader.readU32())
-        return palette
-
-    def save(self):
-        tileSize = 64
-        # TODO: Assumes all images have dimensions of multiples of 8
-        maxRes = (0,0)
-        for image in self.images:
-            maxRes = (maxRes[0] + image.size[0], max(maxRes[1], image.size[1]))
-        paletteSurface = Image.new('RGB', maxRes)
-        offsetX = 0
-        for image in self.images:
-            paletteSurface.paste(image, box=(offsetX, 0))
-            offsetX += image.size[0]
-
-        paletteSurface = paletteSurface.quantize(colors=10)
-
-        writer = binary.BinaryWriter()
-        writer.writeU16(len(self.images))
-        bpp = log(int(ceil(ceil(log(len(paletteSurface.getcolors()), 2)) / 4) * 4), 2)
-        writer.writeU16(int(bpp) + 1)
-        bpp = 2 ** bpp
-
-        offsetX = 0
-        for indexImage, image in enumerate(self.images):
-            imageTilemap = []
-            imageTiles = []
-            image = paletteSurface.crop((offsetX, 0, offsetX + image.size[0], image.size[1]))
-            
-            for tileResY in range(self.images[indexImage].size[1] // tileSize):
-                for tileResX in range(self.images[indexImage].size[0] // tileSize):
-                    tempTile = paletteSurface.crop(((tileResX * tileSize) + offsetX,
-                                                    tileResY * tileSize,
-                                                    ((tileResX + 1) * tileSize) + offsetX,
-                                                    (tileResY + 1) * tileSize))
-                    if tempTile in imageTiles:
-                        imageTilemap.append(imageTiles.index(tempTile))
-                    else:
-                        imageTilemap.append(len(imageTiles))
-                        imageTiles.append(tempTile)
-            offsetX += image.size[0]
-
-            writer.writeIntList([image.size[0], image.size[1]], 2)
-
-    def export(self, filename):
-        for i, image in enumerate(self.images):
-            image.save(path.splitext(filename)[0] + "_" + str(i) + "." + EXPORT_EXTENSION)
-
-class LaytonBackgroundImage(File):
-
-    COLOUR_MAX = 250    # Anything above 250 causes graphical corruption
-    COLOUR_ALPHA = [224,0,120]
-
-    def __init__(self):
-        File.__init__(self)
-        self.image = None
-    
-    @staticmethod
-    def fromPil(image):
-        """Create a new background from a PIL-based RGBA/RGB image.
-        \nAll transparency must be represented in the alpha channel of the image.
-        Any blending will be converted to alpha masking.
-        
-        Arguments:
-            image {PIL.Image} -- Image in P, RGB or RGBA mode
-        """
-
-        def addAlphaToOutputImageAndRescaleColour():
-            countColours = countPilPaletteColours(output.image)
-            if countColours > LaytonBackgroundImage.COLOUR_MAX - 1:
-                countColours = LaytonBackgroundImage.COLOUR_MAX - 1
-            output.image = Image.eval(output.image, (lambda p: p + 1))    # Shift palette to make room for alpha
-            tempPalette = LaytonBackgroundImage.COLOUR_ALPHA
-            for channel in output.image.getpalette()[0:countColours * 3]:
-                tempPalette.append(channel << 3)
-            tempPalette.extend(tempPalette[-3:] * (256 - (len(tempPalette) // 3)))
-            output.image.putpalette(tempPalette)
-
-        output = LaytonBackgroundImage()
-        
-        if image.mode in ["P", "RGB", "RGBA"]:
-            # Validate if transparency pathway required because it is slow
-            if image.mode == "P":       # Detect transparency in paletted images
-                if image.info.get("transparency", None) != None:
-                    image = image.convert("RGBA")   # TODO: Hunt in palette for whether transparent colour is used
-                else:
-                    image = image.convert("RGB")
-            if image.mode == "RGBA":    # Validate if image is actually transparent
-                if image.getextrema()[3][0] == 255:
-                    image = image.convert("RGB")
-            
-            alphaPix = []
-            # Strict, but ensures alpha is always preserved even for tiny palettes and/or small details
-            if image.mode == "RGBA":
-                # Produce a 5-bit version of the image with crushed alpha ready for mixing
-                reducedImage = Image.eval(image.convert('RGB'), (lambda p: p >> 3)).convert("RGBA")
-                reducedImage.putalpha(Image.eval(image.split()[-1], (lambda p: int((p >> 7) * 255))))
-
-                colours = {}
-                colourSurfaceX = 0
-                for x in range(image.size[0]):
-                    for y in range(image.size[1]):
-                        r,g,b,a = reducedImage.getpixel((x,y))
-                        if a > 0:
-                            if (r,g,b) not in colours.keys():
-                                colours[(r,g,b)] = 1
-                            else:
-                                colours[(r,g,b)] += 1
-                            colourSurfaceX += 1
-                        else:
-                            alphaPix.append((x,y))
-                
-                # Produce new palette from used colour strip
-                palette = Image.new('RGB', (colourSurfaceX, 1))
-                colourSurfaceX = 0
-                averageColour = [0,0,0]
-                for colour in colours.keys():
-                    for indexPixel in range(colours[colour]):
-                        palette.putpixel((colourSurfaceX + indexPixel, 0), colour)
-                    colourSurfaceX += colours[colour]
-                    averageColour[0], averageColour[1], averageColour[2] = averageColour[0] + (colour[0] * colours[colour]), averageColour[1] + (colour[1] * colours[colour]), averageColour[2] + (colour[2] * colours[colour])
-                palette = palette.quantize(colors=LaytonBackgroundImage.COLOUR_MAX - 1)
-                averageColour = (averageColour[0] // colourSurfaceX, averageColour[1] // colourSurfaceX, averageColour[2] // colourSurfaceX)
-
-                # Reduce colour bleeding on alpha edges by producing a new image with alpha given the average colour
-                alphaCoverage = Image.new("RGB", image.size, averageColour)
-                alphaCoverage.paste(reducedImage, (0,0), mask=reducedImage)
-
-                # Finally quantize image
-                output.image = alphaCoverage.convert("RGB").quantize(palette=palette)   
-            else:
-                # Quantize image if no pre-processing is required
-                output.image = Image.eval(image, (lambda p: p >> 3)).quantize(colors=LaytonBackgroundImage.COLOUR_MAX - 1)
-            
-            addAlphaToOutputImageAndRescaleColour()
-            for alphaLoc in alphaPix: # TODO - Reusing alphaCoverage mask and then overlaying it may be faster
-                output.image.putpixel(alphaLoc, 0)
-
-            if output.image.size[0] % 8 != 0 or output.image.size[1] % 8 != 0:  # Align image to block sizes by filling with transparency
-                tempOriginalImage = output.image
-                tempScaledDimensions = (ceil(output.image.size[0] / 8) * 8, ceil(output.image.size[1] / 8) * 8)
-                output.image = Image.new(tempOriginalImage.mode, tempScaledDimensions, color=0)
-                output.image.putpalette(tempOriginalImage.getpalette())
-                output.image.paste(tempOriginalImage, (0,0))
-
-        # TODO - Exception on None
+    def getComposedFrame(self): # TODO : Store transparent version of atlas to avoid alpha reprocessing
+        output = Image.new("RGBA", self.dimensions)
+        for frameRef in self.imageComponents:
+            targetImage = frameRef.atlasImageReference.getImage(frameRef.atlasSubImageIndex)
+            targetImageAlpha = getTransparentLaytonPaletted(targetImage)
+            output.paste(targetImageAlpha, frameRef.pos, targetImageAlpha)
         return output
 
-    def save(self):
-        writer = binary.BinaryWriter()
-        countColours = countPilPaletteColours(self.image)
-        writer.writeU32(countColours)
-        for colour in pilPaletteToRgbTriplets(self.image)[0:countColours]:
-            r,g,b = colour
-            tempEncodedColour = (b << 7) + (g << 2) + (r >> 3)
-            writer.writeU16(tempEncodedColour)
+class AnimationKeyframe():
+    def __init__(self):
+        self.duration = 0
+        self.indexFrame = 0
 
-        tiles = []
-        tilemap = []
-        tileOptimisationMap = self.image.resize((self.image.size[0] // 8 , self.image.size[1] // 8), resample=Image.BILINEAR)
-        tileOptimisationMap = tileOptimisationMap.quantize(colors=256)
-        tileOptimisationDict = {}
+# TODO : Rewrite some of this to remove indexing, as values are passed by reference so not relevant
+# TODO : Sort out variable space, setters and getters on public variables
+# TODO : Add support for arj decoding
+# TODO : Change to @property setup
 
-        for yTile in range(self.image.size[1] // 8):
-            # TODO - Evaluate each tile for any similar tiles
-            for xTile in range(self.image.size[0] // 8):
-                tempTile = self.image.crop((xTile * 8, yTile * 8, (xTile + 1) * 8, (yTile + 1) * 8))
-                if tempTile in tiles:
-                    tilemap.append(tiles.index(tempTile))
-                else:
-                    tilemap.append(len(tiles))
-                    tiles.append(tempTile)
-        
-        writer.writeU32(len(tiles))
-        for tile in tiles:
-            writer.write(tile.tobytes())
-        
-        writer.writeU16(self.image.size[0] // 8)
-        writer.writeU16(self.image.size[1] // 8)
-        for key in tilemap:
-            writer.writeU16(key)
+class Animation():
+    def __init__(self):
+        self.name                        = ""
+        self.keyframes                   = []
+        self.subAnimationIndex  = None
+        self.subAnimationOffset = (0,0)
+    
+    def addKeyframe(self, frame):
+        self.keyframes.append(frame)
+    
+    def setName(self, name):
+        self.name = name
 
-        self.data = writer.data
+    def getName(self, name):
+        return self.name
 
-    def load(self, data):
+    def getFrameAtIndex(self, index):
+        pass
+
+    def getCycleLength(self):
+        cycleLength = 0
+        for keyframe in self.keyframes:
+            cycleLength += keyframe.duration
+        return cycleLength
+
+class AnimatedImage():
+
+    PREFIX_ARC_ATLAS_NAME = "ARC"
+
+    def __init__(self):
+        self.atlases = {}
+        self.frames = []
+        self.animations = []
+        self.variables = {}
+
+        for index in range(1,17):
+            self.variables["Var" + str(index)] = [0,0,0,0,0,0,0,0]
+
+        self.subAnimation = None
+    
+    def normaliseAnimation(self, animation):
+        # Merge subanimation and animation by looking at subanimation cycle and merging
+        # TODO : getAnimations method which gives this automagically
+        return animation
+
+    @staticmethod
+    def fromBytesArc(data, functionGetFileByName=None):
+        output = AnimatedImage()
+        workingAtlas = StaticImage()
         reader = binary.BinaryReader(data=data)
-        lengthPalette = reader.readU32()
-        palette = []
-        for _indexColour in range(lengthPalette):
-            palette.extend(Colour.fromInt(reader.readU16()).toList())
 
-        tilePilMap = {}
-        countTile = reader.readU32()
-        for index in range(countTile):
-            tilePilMap[index] = Tile(data=reader.read(64)).decodeToPil(palette, 8)
+        countSubImage = reader.readU16()
+        givenBpp = 2 ** (reader.readU16() - 1)
+        logPrint("Frames", countSubImage)
+        logPrint("Bpp", givenBpp)
+
+        tempWorkingImages           = []
+        tempWorkingImageResolutions = []
+
+        for indexImage in range(countSubImage):
+            logPrint("Add Image")
+            resolution = (reader.readU16(), reader.readU16())
+            logPrint("\t", resolution)
+            countTiles = reader.readU32()
+            logPrint("\t", countTiles)
+            workingImage = TiledImageHandler()
+            for _indexTile in range(countTiles):
+                offset = (reader.readU16(), reader.readU16())
+                tileRes = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
+                logPrint("\t",offset,tileRes)
+                workingImage.addTileFromReader(reader, prolongDecoding=True, resolution=tileRes, offset=offset, overrideBpp=givenBpp)
+            tempWorkingImages.append(workingImage)
+            tempWorkingImageResolutions.append(resolution)
         
-        resTile = [reader.readU16(), reader.readU16()]
-        self.image = Image.new("P", (int(resTile[0] * 8), int(resTile[1] * 8)))
-        self.image.putpalette(palette)
+        countColours = reader.readU32()
+        palette = getPaletteAsListFromReader(reader, countColours)
+        atlasKey = AnimatedImage.PREFIX_ARC_ATLAS_NAME + str(len(output.atlases))
+        output.atlases[atlasKey] = workingAtlas
+        for indexImage in range(countSubImage):
+            tempWorkingImages[indexImage].setPaletteFromList(palette, countColours=countColours)
+            workingAtlas.addImage(tempWorkingImages[indexImage].tilesToImage(tempWorkingImageResolutions[indexImage], useOffset=True))
+            workingFrame = AnimationFrame()
+            workingFrame.name = str(indexImage)
+            workingFrame.dimensions = workingAtlas.getImage(indexImage).size
+            workingFrame.imageComponents.append(AnimationFramePartialDetails(output.atlases[atlasKey], indexImage))
+            output.frames.append(workingFrame)
+        
+        reader.seek(30,1)
+        countAnims = reader.readU32()
+        for animIndex in range(countAnims):
+            workingAnim = Animation()
+            workingAnim.setName(reader.readPaddedString(30, ENCODING_DEFAULT_STRING))
+            output.animations.append(workingAnim)
+        
+        for animIndex in range(countAnims):
+            countFrames = reader.readU32()
 
-        for y in range(resTile[1]):
-            for x in range(resTile[0]):
-                tempSelectedTile = reader.readU16()
-                tileSelectedIndex = tempSelectedTile & (2 ** 10 - 1)
-                tileSelectedFlipX = tempSelectedTile & (2 ** 11)
-                tileSelectedFlipY = tempSelectedTile & (2 ** 10)
+            indexKeyframe = reader.readU32List(countFrames)
+            durationKeyframe = reader.readU32List(countFrames)
+            indexFrame = reader.readU32List(countFrames)
 
-                if tileSelectedIndex < (2 ** 10 - 1):
-                    # TODO: Blank out tile (should be default if alpha added)
-                    tileFocus = tilePilMap[tileSelectedIndex % countTile]
-                    if tileSelectedFlipX:
-                        tileFocus = tileFocus.transpose(method=Image.FLIP_LEFT_RIGHT)
-                    if tileSelectedFlipY:
-                        tileFocus = tileFocus.transpose(method=Image.FLIP_TOP_BOTTOM)
-                    self.image.paste(tileFocus, (x*8, y*8))
+            orderedKeyframes = {}
+            for indexAnimationKeyframe in range(countFrames):
+                workingFrame = AnimationKeyframe()
+                workingFrame.duration = durationKeyframe[indexAnimationKeyframe]
+                workingFrame.indexFrame = indexFrame[indexAnimationKeyframe]
+                orderedKeyframes[indexKeyframe[indexAnimationKeyframe]] = workingFrame
+            orderedKeyframeIndices = list(orderedKeyframes.keys())
+            orderedKeyframeIndices.sort()
+            for sortedIndex in orderedKeyframeIndices:
+                output.animations[animIndex].addKeyframe(orderedKeyframes[sortedIndex])
+
+        variableNames = []
+        if reader.hasDataRemaining():
+            reader.seek(2,1)
+            output.variables = {}
+
+            for indexData in range(16):
+                name = reader.readPaddedString(16, ENCODING_DEFAULT_STRING)
+                variableNames.append(name)
+                output.variables[name] = [0,0,0,0,0,0,0,0]
+
+            for indexData in range(8):
+                for indexVariable in range(16):
+                    output.variables[variableNames[indexVariable]][indexData] = reader.readS16()
+            
+            offsetSubAnimationData = reader.tell()
+            if callable(functionGetFileByName):
+                try:
+                    reader.seek(int(5 * countAnims), 1)
+                    nameSubAnimation = reader.readPaddedString(128, ENCODING_DEFAULT_STRING)
+                    if nameSubAnimation != "":
+                        output.subAnimation = AnimatedImage.fromBytesArc(functionGetFileByName(nameSubAnimation), functionGetFileByName=functionGetFileByName)
+
+                    reader.seek(offsetSubAnimationData)
+                    tempOffset = [[],[]]
+                    for indexDimension in range(2):
+                        for indexOffset in range(countAnims):
+                            tempOffset[indexDimension].append(reader.readS16())
+                    for indexAnim in range(countAnims):
+                        output.animations.subAnimationOffset = (tempOffset[0][indexAnim], tempOffset[1][indexAnim])
+                        output.animations.subAnimationIndex = reader.readUInt(1)
+
+                except:
+                    pass
+
+        return output
+    
+    def toBytesArc(self, exportVariables=False):
+
+        # Squashes all frames into one ARC. Palette is shared so potential to lose much quality
+        # TODO - When input is an ARC, no requantization should be done (unless a face, but should be worked around).
+        # Loss of quality is steep so more care should be taken to preserve anim quality
+
+        images = []
+        for frame in self.frames:
+            images.append(frame.getComposedFrame())
+        
+        if len(images) > 0:
+            palette  = getPaletteFromImages(images)
+
+            packedImages = []
+            packedDimensions = []
+
+            # Prepare everything
+            for indexImage, image in enumerate(images):
+                workingImage = TiledImageHandler()
+                width, height = workingImage.imageToTiles(image, useOffset=True, usePalette=palette)
+                packedImages.append(workingImage)
+                packedDimensions.append((width,height))
+            
+            writer = binary.BinaryWriter()
+            writer.writeU16(len(images))
+
+            encodedBpp = int(log(packedImages[0].getBpp(), 2) + 1)
+            writer.writeU16(encodedBpp)
+
+            for indexImage, image in enumerate(packedImages):
+                width, height = packedDimensions[indexImage]
+                writer.writeU16(width)
+                writer.writeU16(height)
+                writer.writeU32(len(image.getTiles()))
+                for tile in image.getTiles():       # TODO : Optimisation, tiles can be up to 128x128 which can reduce header overhead
+                    offsetX, offsetY = tile.offset
+                    writer.writeU16(offsetX)
+                    writer.writeU16(offsetY)
+                    tileX, tileY = tile.image.size
+                    writer.writeU16(int(log(tileX, 2) - 3))
+                    writer.writeU16(int(log(tileY, 2) - 3))
+                    writer.write(tile.toBytes(packedImages[0].getBpp()))
+            
+            palette = image.getPalette()    # Switch to RGB triplets
+            writer.writeU32(len(palette))
+            for r,g,b in palette:
+                writer.writeU16(getPackedColourFromRgb888(r,g,b))
+
+            writer.pad(30)
+            writer.writeU32(len(self.animations))
+            for anim in self.animations:
+                writer.writePaddedString(anim.name, 30, ENCODING_DEFAULT_STRING)
+
+            for anim in self.animations:
+                writer.writeU32(len(anim.keyframes))
+                for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                    writer.writeU32(indexKeyframe)
+                for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                    writer.writeU32(keyframe.duration)
+                for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                    writer.writeU32(keyframe.indexFrame)
+            
+            if exportVariables:
+                writer.write(b'\x34\x12')
+                for variableName in self.variables:
+                    writer.writePaddedString(variableName, 30, ENCODING_DEFAULT_STRING)
+                
+                for indexData in range(8):
+                    for variableName in self.variables:
+                        writer.writeS16(self.variables[variableName][indexData])
+                
+
+
+            writer.pad(746) # TODO - Read variables and subanimation
+
+            return writer.data
+        return None
+
+    def toBytesCAni(self):
+        packAnim = LaytonPack2()
+        scriptAnim = LaytonScript()
+
+        pass
+
+    @staticmethod
+    def fromBytesCAni(data):
+        output = AnimatedImage()
+
+        scriptAnim  = LaytonScript()
+        packAnim    = LaytonPack2()
+
+        if packAnim.load(data):
+            for file in packAnim.files:
+                if file.name.split(".")[-1] == "lbin":
+                    scriptAnim.load(file.data)
+                else:
+                    output.atlases[file.name] = StaticImage.fromBytesLImg(file.data)
+        
+        atlasesAsIndex  = {}
+        workingFrame    = AnimationFrame()
+        workingAnim     = Animation()
+        
+        for command in scriptAnim.commands:
+            if command.opcode == OPCODE_LOAD_ASSET:
+                atlasesAsIndex[len(atlasesAsIndex)] = command.operands[0].value
+
+            elif command.opcode == OPCODE_DEFINITION_FRAME_START:
+                # TODO : Implement offset
+                workingFrame            = AnimationFrame()
+                workingFrame.name       = command.operands[0].value
+                workingFrame.dimensions = (command.operands[3].value, command.operands[4].value)
+
+            elif command.opcode == OPCODE_DEFINITION_FRAME_MIX_CONTENT:
+                # TODO : Research last unknown
+                subFrameInfo            = AnimationFramePartialDetails(output.atlases[atlasesAsIndex[command.operands[0].value]], command.operands[1].value)
+                subFrameInfo.pos        = (command.operands[2].value, command.operands[3].value)
+                workingFrame.imageComponents.append(subFrameInfo)
+
+            elif command.opcode == OPCODE_DEFINITION_FRAME_END:
+                output.frames.append(workingFrame)
+            
+            elif command.opcode == OPCODE_DEFINITION_ANIM_START:
+                workingAnim = Animation()
+                workingAnim.setName(command.operands[0].value)
+                # TODO: Implement rest of unknowns (crop, offset)
+            
+            elif command.opcode == OPCODE_DEFINITION_ANIM_MIX_FRAME:
+                tempFrame = AnimationKeyframe()
+                tempFrame.indexFrame = command.operands[0].value
+                tempFrame.duration = command.operands[1].value
+                workingAnim.keyframes.append(tempFrame)
+            
+            elif command.opcode == OPCODE_DEFINITION_ANIM_END:
+                output.animations.append(workingAnim)
+        
+        return output
+
+class StaticImage():
+    def __init__(self):
+        self.subImages = []
+    
+    def addImage(self, image:Image):
+        self.subImages.append(image)
+
+    def getImage(self, indexImage):
+        if 0 <= indexImage < len(self.subImages):
+            return self.subImages[indexImage]
+        return None
+    
+    def getCountImages(self):
+        return len(self.subImages)
+
+    def removeImage(self, indexImage):
+        if 0 <= indexImage < len(self.subImages):
+            self.subImages.pop(indexImage)
+            return True
+        return False
+    
+    @staticmethod
+    def fromBytesArc(data):
+        output = StaticImage()
+        reader = binary.BinaryReader(data=data)
+        workingImage = TiledImageHandler()
+        
+        lengthPalette = reader.readU32()
+        workingImage.setPaletteFromList(getPaletteAsListFromReader(reader, lengthPalette), countColours=lengthPalette)
+        for index in range(reader.readU32()):
+            workingImage.addTileFromReader(reader, overrideBpp=8)
+        
+        resolution = (reader.readU16() * 8, reader.readU16() * 8)
+        tileMap = {}
+        for index in range(int((resolution[0] * resolution[1]) // 64)):
+            tileMap[index] = reader.readU16()
+
+        workingImage.setTileMap(tileMap)
+        output.addImage(workingImage.tilesToImage(resolution))
+        return output
+    
+    def toBytesArc(self):
+        # TODO - Not this...
+        tempOutput = []
+        for indexImage in range(self.getCountImages()):
+            inputImage = self.getImage(indexImage)
+            workingImage = TiledImageHandler()
+            padWidth, padHeight = workingImage.imageToTiles(inputImage)
+
+            palette = workingImage.getPalette()
+            tiles = workingImage.getTiles()
+            tileMap = workingImage.getTileMap()
+
+            writer = binary.BinaryWriter()
+            writer.writeU32(len(palette))
+            for r,g,b in palette:
+                writer.writeU16(getPackedColourFromRgb888(r,g,b))
+            
+            writer.writeU32(len(tiles))
+            for tile in tiles:
+                writer.write(tile.toBytes(8))
+
+            writer.writeIntList([padWidth // 8, padHeight // 8], 2)
+            for indexTile in range(len(tileMap)):
+                writer.writeU16(tileMap[indexTile])
+
+            tempOutput.append(writer.data)
+
+        return tempOutput
+
+    @staticmethod
+    def fromBytesLImg(data):
+        output = StaticImage()
+        reader = binary.BinaryReader(data=data)
+        if reader.read(4) == b'LIMG':
+            lengthHeader        = reader.readU32()
+            offsetSubImageData  = reader.readU16()
+            countSubImage       = reader.readU16()
+            _offsetImageParam    = reader.readU16()
+            reader.seek(2,1)                            # UNK
+            offsetTableTile     = reader.readU16()
+            lengthTableTile     = reader.readU16()
+            offsetTile          = reader.readU16()
+            countTile           = reader.readU16()
+            reader.seek(2,1)                            # UNK, maybe countPalette
+            lengthPalette       = reader.readU16()
+            resolution          = (reader.readU16(),
+                                   reader.readU16())
+            
+            workingImage = TiledImageHandler()
+
+            reader.seek(lengthHeader)
+            workingImage.setPaletteFromList(getPaletteAsListFromReader(reader, lengthPalette), countColours=lengthPalette)
+
+            reader.seek(offsetTile)
+            for _index in range(countTile):
+                workingImage.addTileFromReader(reader)
+            
+            reader.seek(offsetTableTile)
+            tileMap = {}
+            for index in range(lengthTableTile):
+                tileMap[index] = reader.readU16()
+            workingImage.setTileMap(tileMap)
+
+            packedTexture = workingImage.tilesToImage(resolution)
+
+            reader.seek(offsetSubImageData)
+            for _subImageCount in range(countSubImage):
+                left = reader.readUInt(1) * 8
+                upper = reader.readUInt(1) * 8
+                width = reader.readUInt(1) * 8
+                height = reader.readUInt(1) * 8
+                output.addImage(packedTexture.crop((left, upper, left + width, upper + height)))
+                reader.seek(4,1)                        # UNK
+        return output

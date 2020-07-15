@@ -103,7 +103,7 @@ class FlagsAsArray():
             self.flags.append(defaultState)
     
     def setSlot(self, state, slotIndex):
-        if slotIndex > 0 and slotIndex < len(self.flags):
+        if slotIndex >= 0 and slotIndex < len(self.flags):
             self.flags[slotIndex] = state
     
     def getSlot(self, slotIndex):
@@ -484,7 +484,7 @@ class Layton2SaveSlot():
         self.picarats               = 0
         
         self.roomIndex              = 1
-        self.roomSubIndex           = 1
+        self.roomSubIndex           = 0
         self.timeElapsed            = 0
         self.chapter                = 0
         self.minigameTeaState       = HandlerTeaState()

@@ -184,16 +184,18 @@ class AnimatedImage():
                     reader.seek(int(5 * countAnims), 1)
                     nameSubAnimation = reader.readPaddedString(128, ENCODING_DEFAULT_STRING)
                     if nameSubAnimation != "":
-                        output.subAnimation = AnimatedImage.fromBytesArc(functionGetFileByName(nameSubAnimation), functionGetFileByName=functionGetFileByName)
+                        subAnimationData = functionGetFileByName(nameSubAnimation)
+                        if subAnimationData != None:
+                            output.subAnimation = AnimatedImage.fromBytesArc(subAnimationData, functionGetFileByName=functionGetFileByName)
 
-                    reader.seek(offsetSubAnimationData)
-                    tempOffset = [[],[]]
-                    for indexDimension in range(2):
-                        for indexOffset in range(countAnims):
-                            tempOffset[indexDimension].append(reader.readS16())
-                    for indexAnim in range(countAnims):
-                        output.animations.subAnimationOffset = (tempOffset[0][indexAnim], tempOffset[1][indexAnim])
-                        output.animations.subAnimationIndex = reader.readUInt(1)
+                            reader.seek(offsetSubAnimationData)
+                            tempOffset = [[],[]]
+                            for indexDimension in range(2):
+                                for indexOffset in range(countAnims):
+                                    tempOffset[indexDimension].append(reader.readS16())
+                            for indexAnim in range(countAnims):
+                                output.animations[indexAnim].subAnimationOffset = (tempOffset[0][indexAnim], tempOffset[1][indexAnim])
+                                output.animations[indexAnim].subAnimationIndex = reader.readUInt(1)
 
                 except:
                     pass

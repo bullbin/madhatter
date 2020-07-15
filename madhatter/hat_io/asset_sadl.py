@@ -104,7 +104,7 @@ class MusicSadlAsWave(File):
                         samplesToDo = sampleNumber - samplesWritten
 
                     for chan in range(countChannels):
-                        decodeProcyon(data, offset[chan], samplesToDo, hist[chan], buffer[chan], samplesWritten)
+                        decodeProcyon(reader, offset[chan], samplesToDo, hist[chan], buffer[chan], samplesWritten)
                         offset[chan] += int(sizeBlock * countChannels)
 
                     samplesWritten += samplesToDo

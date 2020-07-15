@@ -139,7 +139,6 @@ class GdScript(Script):
         while reader.tell() < length + 4:
             lastType = reader.readU16()
             if lastType == 0:
-                # TODO : Append last command
                 if command != None:
                     self.commands.append(command)
                 command = Instruction()

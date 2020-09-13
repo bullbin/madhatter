@@ -486,7 +486,7 @@ class Layton2SaveSlot():
         self.roomIndex              = 1
         self.roomSubIndex           = 0
         self.timeElapsed            = 0
-        self.chapter                = 0
+        self.chapter                = 5
         self.minigameTeaState       = HandlerTeaState()
         self.minigameHamsterState   = HandlerHamsterState()
         self.minigameCameraState    = HandlerCameraState()
@@ -500,9 +500,10 @@ class Layton2SaveSlot():
         self.tutorialFlag           = FlagsAsArray(16)
 
         self.anthonyDiaryState      = EnableNewFlagState(12)
+        self.idHeldAutoEvent        = -1
         self.idImmediateEvent       = -1
 
-        self.goal = 100
+        self.goal                   = 100
     
     def clear(self):
         self = Layton2SaveSlot()
@@ -557,14 +558,15 @@ class Layton2SaveSlot():
         self.photoPieceFlag         = FlagsAsArray.fromBytes(reader.read(2))
         self.tutorialFlag           = FlagsAsArray.fromBytes(reader.read(2))
 
-        reader.seek(3,1)
+        reader.seek(1,1)
 
+        self.idHeldAutoEvent        = reader.readS16()
         self.idImmediateEvent       = reader.readS16()
         self.anthonyDiaryState      = EnableNewFlagState.fromBytes(reader.read(4), 12, 2)
 
         reader.seek(4,1)
 
-        self.goal                   = reader.readU32()
+        self.goal                   = reader.readU16()
 
         if self.roomIndex != self.headerRoomIndex:
             self.isTampered = True
@@ -621,8 +623,7 @@ class Layton2SaveSlot():
             data.write(self.tutorialFlag.toBytes(outLength=2))
 
             data.pad(1, padChar = b'\x00')
-            data.pad(2, padChar = b'\xff')
-
+            data.writeInt(self.idHeldAutoEvent, 2, signed=True)
             data.writeInt(self.idImmediateEvent, 2, signed=True)
             data.write(self.anthonyDiaryState.toBytes(2))
 
@@ -718,6 +719,9 @@ class Layton2SaveFile(File):
                     self.getSlotData(slotId).fromBytes(reader.read(880))
                 else:
                     reader.seek(880,1)
+        
+            return True
+        return False
 
     def save(self):
         writer = binary.BinaryWriter()

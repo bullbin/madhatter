@@ -187,7 +187,7 @@ class PlaceData(File):
         
         reader.seek(588)
         for eventIndex in range(16):
-            self._objEvents.append(EventEntry.fromBytes(reader.read(32)))
+            self._objEvents.append(EventEntry.fromBytes(reader.read(8)))
             if self._objEvents[-1].bounding.isEmpty():
                 self._objEvents.pop()
                 break

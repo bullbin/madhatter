@@ -10,13 +10,13 @@ class DlzEntryNzLst(DlzEntryNull):
 
     LENGTH_ENTRY = 0x36
 
-    def __init__(self, idInternal, idExternal, name, idReward):
+    def __init__(self, idInternal, idExternal, name, idGroup):
         DlzEntryNull.__init__(self)
 
         self.idInternal = idInternal
         self.idExternal = idExternal
         self.name       = name
-        self.idReward   = idReward
+        self.idGroup    = idGroup
 
     @staticmethod
     def fromBytes(data):
@@ -30,7 +30,7 @@ class DlzEntryNzLst(DlzEntryNull):
         writer.writeU16(self.idInternal)
         writer.writeU16(self.idExternal)
         writer.writePaddedString(self.name, 48, ENCODING_DEFAULT_STRING)
-        writer.writeS16(self.idReward)
+        writer.writeS16(self.idGroup)
         return writer.data
 
 class NazoList(DlzData):

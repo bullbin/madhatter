@@ -22,6 +22,13 @@ def getTransparentLaytonPaletted(inputImage):
                 output.putpixel((x,y), (0,0,0,0))
     return output
 
+def mergePalettedImage(inputImage, outputImage, pos):
+    width, height = inputImage.size
+    for y in range(height):
+        for x in range(width):
+            if inputImage.getpixel((x,y)) != 0:
+                outputImage.putpixel((x + pos[0],y + pos[1]), inputImage.getpixel((x,y)))
+
 class AnimationFramePartialDetails():
     def __init__(self, atlasImage, atlasSubImageIndex):
         self.atlasImageReference = atlasImage
@@ -62,7 +69,7 @@ class AnimationFrame():
                 targetImageAlpha = getTransparentLaytonPaletted(targetImage)
                 output.paste(targetImageAlpha, frameRef.pos, targetImageAlpha)
             else:
-                output.paste(targetImage, frameRef.pos)
+                mergePalettedImage(targetImage, output, frameRef.pos)
 
         return output
 

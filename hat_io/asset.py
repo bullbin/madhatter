@@ -296,7 +296,7 @@ class File():
         # Write anything left, as there may be blocks remaining after the reader ran out of data
         writeData()
         if addHeader:
-            self.data = bytearray(File.LAYTON_1_COMPRESSION[File.COMP_RLE] + File.COMP_RLE + len(self.data).to_bytes(3, byteorder = 'little') + writer.data)
+            self.data = bytearray(File.LAYTON_1_COMPRESSION[File.COMP_RLE] + File.COMP_RLE.to_bytes(1, byteorder='little') + len(self.data).to_bytes(3, byteorder = 'little') + writer.data)
         else:
             self.data = bytearray(File.COMP_RLE + len(self.data).to_bytes(3, byteorder = 'little') + writer.data)
             
@@ -373,6 +373,7 @@ class Archive(File):
                 dataOut.write(fileChunk.data)
     
     def getFile(self, name):
+        # TODO - Optimise with a dictionary
         for file in self.files:
             if file.name == name:
                 return file.data

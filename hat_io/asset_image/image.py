@@ -35,11 +35,35 @@ class AnimationFrame():
         self.imageComponents = []
 
     def getComposedFrame(self): # TODO : Store transparent version of atlas to avoid alpha reprocessing
-        output = Image.new("RGBA", self.dimensions)
+        reusePalette = True
+        targetPalette = None
         for frameRef in self.imageComponents:
             targetImage = frameRef.atlasImageReference.getImage(frameRef.atlasSubImageIndex)
-            targetImageAlpha = getTransparentLaytonPaletted(targetImage)
-            output.paste(targetImageAlpha, frameRef.pos, targetImageAlpha)
+            targetImage : Image
+            if targetImage.mode == "P":
+                if targetPalette == None:
+                    targetPalette = targetImage.getpalette()
+                elif targetPalette != targetImage.getpalette():
+                    reusePalette = False
+                    break
+            else:
+                reusePalette = False
+                break
+        
+        if reusePalette and targetPalette != None:
+            output = Image.new("P", self.dimensions)
+            output.putpalette(targetPalette)
+        else:
+            output = Image.new("RGBA", self.dimensions)
+
+        for frameRef in self.imageComponents:
+            targetImage = frameRef.atlasImageReference.getImage(frameRef.atlasSubImageIndex)
+            if output.mode == "RGBA":
+                targetImageAlpha = getTransparentLaytonPaletted(targetImage)
+                output.paste(targetImageAlpha, frameRef.pos, targetImageAlpha)
+            else:
+                output.paste(targetImage, frameRef.pos)
+
         return output
 
 class AnimationKeyframe():
@@ -114,14 +138,13 @@ class AnimatedImage():
         for indexImage in range(countSubImage):
             logPrint("Add Image")
             resolution = (reader.readU16(), reader.readU16())
-            logPrint("\t", resolution)
             countTiles = reader.readU32()
-            logPrint("\t", countTiles)
+            logPrint("\t", resolution, countTiles)
             workingImage = TiledImageHandler()
             for _indexTile in range(countTiles):
+                # TODO - Are tiles written if empty?
                 offset = (reader.readU16(), reader.readU16())
                 tileRes = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
-                logPrint("\t",offset,tileRes)
                 workingImage.addTileFromReader(reader, prolongDecoding=True, resolution=tileRes, offset=offset, overrideBpp=givenBpp)
             tempWorkingImages.append(workingImage)
             tempWorkingImageResolutions.append(resolution)
@@ -267,15 +290,16 @@ class AnimatedImage():
             if exportVariables:
                 writer.write(b'\x34\x12')
                 for variableName in self.variables:
-                    writer.writePaddedString(variableName, 30, ENCODING_DEFAULT_STRING)
+                    writer.writePaddedString(variableName, 16, ENCODING_DEFAULT_STRING)
                 
+                writer : binary.BinaryWriter
+
                 for indexData in range(8):
                     for variableName in self.variables:
-                        writer.writeS16(self.variables[variableName][indexData])
-                
-
-
-            writer.pad(746) # TODO - Read variables and subanimation
+                        writer.writeInt(self.variables[variableName][indexData], 2, signed=True)
+                        
+                # TODO - Is this Layton2 specific?
+                writer.pad(203) # TODO - Read variables and subanimation
 
             return writer.data
         return None

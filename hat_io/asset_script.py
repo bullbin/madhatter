@@ -131,6 +131,28 @@ class GdScript(Script):
     def __init__(self):
         Script.__init__(self)
     
+    def save(self, isTalkscript=False):
+        scriptWriter = binary.BinaryWriter()
+        # TODO - Validation, since command length is known for LAYTON1 and LAYTON2
+        for indexCommand in range(self.getInstructionCount()):
+            scriptWriter.writeU16(0)
+            command = self.getInstruction(indexCommand)
+            scriptWriter.write(command.opcode)
+            for operand in command.operands:
+                scriptWriter.writeU16(operand.type)
+                if operand.type in [1,6,7]:
+                    scriptWriter.writeS32(operand.value)
+                elif operand.type == 2:
+                    scriptWriter.writeFloat(operand.value)
+                elif operand.type == 3:
+                    scriptWriter.writeLengthAndString(operand.value, ENCODING_DEFAULT_STRING)
+                elif operand.type == 4:
+                    scriptWriter.writeU16(operand.value)
+                else:
+                    pass
+        scriptWriter.write(b'\x0c\x00')
+        self.data = len(scriptWriter.data).to_bytes(4, byteorder = 'little') + scriptWriter.data
+
     def load(self, data, isTalkscript=False):
         
         reader = binary.BinaryReader(data=data)

@@ -51,13 +51,18 @@ class PuzzleData():
         self.wasEncountered = False
         self.wasSolved      = False
         self.wasPicked      = False
+        self.enableNazoba   = False
         self.levelDecay     = 0
         self.levelHint      = 0
+
+    def incrementDecayStage(self):
+        self.levelDecay = min(2, self.levelDecay + 1)
     
     def setFromData(self, data):
         self.wasEncountered = ((data & 0x01) != 0) or ((data & 0x02) != 0)
         self.wasSolved = (data & 0x02) != 0
         self.wasPicked = (data & 0x80) != 0
+        self.enableNazoba = ((data & 0x40) != 0 and not(self.wasSolved))
         self.levelDecay = (data >> 2) & 0x03
         self.levelHint = (data >> 4) & 0x03
 
@@ -72,6 +77,7 @@ class PuzzleData():
         if self.wasSolved:
             output += self.wasSolved << 1
         else:
+            output += (self.enableNazoba << 6)
             output += self.wasEncountered
         return output.to_bytes(1, byteorder = 'little')
 
@@ -631,6 +637,7 @@ class Layton2SaveSlot():
 
             data.writeInt(self.goal, 4)
 
+            # TODO - There's a few flags here
             writer.writeU32(calculateSaveChecksumFromData(data.data))
             writer.write(data.data)
         else:
@@ -684,6 +691,13 @@ class Layton2SaveFile(File):
     
     def getSlotData(self, slot):
         return self._slots[slot]
+    
+    def setSlotData(self, indexSlot, slot):
+        if 0 <= indexSlot < len(self._slots):
+            if type(slot) == Layton2SaveSlot:
+                self._slots[indexSlot] = slot
+                return True
+        return False
 
     def load(self, data):
         reader = binary.BinaryReader(data=data)
@@ -738,7 +752,13 @@ class Layton2SaveFile(File):
                 header.writePaddedString(saveSlot.name, 20, ENCODING_DEFAULT_STRING)
                 header.writeInt(saveSlot.roomIndex, 1)
                 header.pad(23)  # Something triggers game to write string data to this instead
+                
+                # TODO - Add overflow checks to writer
+                while saveSlot.timeElapsed >= 0xffffffff:
+                    saveSlot.timeElapsed -= 0xffffffff
+
                 header.writeInt(saveSlot.timeElapsed, 4)
+
                 solved, encountered = saveSlot.getSolvedAndEncounteredPuzzleCount()
                 header.writeInt(solved, 2)
                 header.writeInt(encountered, 2)

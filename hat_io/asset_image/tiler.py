@@ -34,19 +34,23 @@ def alignToFitTile(image):
     return output
 
 def purgePaletteList(palette):
-    output = []
-    for indexTriplet in range(len(palette) // 3):
-        indexTriplet = indexTriplet * 3
-        tempTriplet = [palette[indexTriplet],
-                       palette[indexTriplet + 1],
-                       palette[indexTriplet + 2]]
+    # TODO - Get palette length from image
+
+    endIndex = len(palette) // 3
+
+    for indexTriplet in range((len(palette) // 3) - 1, -1, -1):
+        indexPalette = indexTriplet * 3
+        tempTriplet = [palette[indexPalette],
+                       palette[indexPalette + 1],
+                       palette[indexPalette + 2]]
         
         if tempTriplet[0] == tempTriplet[1] == tempTriplet[2]:  # Primitive
-            if tempTriplet[0] == indexTriplet // 3:
-                break
-        
-        output.extend(tempTriplet)
-    return output
+            if tempTriplet[0] == indexTriplet:
+                endIndex = indexTriplet
+        else:
+            break
+
+    return list(palette[0:endIndex * 3])
 
 def getPaletteFromImages(images):
     # There is a limit in PIL but hopefully this will never be reached
@@ -203,7 +207,6 @@ class TiledImageHandler():
         self.tileMap = tileMap
 
     def setPaletteFromList(self, palette, countColours=-1):
-        # logPrint(palette)
         # TODO : Get palette from any internal tiles to prevent too little/too many colours being added
         self.paletteRgbTriplets = []
         
@@ -278,6 +281,26 @@ class TiledImageHandler():
         return output
     
     def imageToTiles(self, image, useOffset=False, usePalette=[]):
+
+        def getDimensionSplits(dimension, maxDim):
+            dimension = round(ceil(dimension / 8) * 8)
+            splits = [8]
+            while splits[-1] < maxDim or splits[-1] < dimension:
+                splits.append(splits[-1] * 2)
+            splits.reverse()
+
+            output = []
+            while dimension > 0:
+                for split in splits:
+                    while split <= dimension:
+                        output.append(split)
+                        dimension -= split
+                        break
+            return output
+
+        def getDimensionSplitsLayton2(dimension):
+            return getDimensionSplits(dimension, maxDim=128)
+
         # TODO : Extend palette, change palette, etc
         logPrint("Called to convert!")
         logPrint("\tInput:", image.mode)
@@ -322,14 +345,19 @@ class TiledImageHandler():
         
         if useOffset:
             logPrint("\tFilling with offset data...")
-            for tileY in range(height // 8):
-                for tileX in range(width // 8):
-                    left = tileX * 8
-                    upper = tileY * 8
+            tileHeights = getDimensionSplitsLayton2(height)
+            tileWidths = getDimensionSplitsLayton2(width)
+
+            y = 0
+            for tileY in list(tileHeights):
+                x = 0
+                for tileX in list(tileWidths):
                     tempTile = Tile()
-                    tempTile.setImage(imagePadded.crop(box=(left, upper, left + 8, upper + 8)))
-                    tempTile.setOffset((left, upper))
+                    tempTile.setImage(imagePadded.crop(box=(x, y, x + tileX, y + tileY)))
+                    tempTile.setOffset((x,y))
                     self.tiles.append(tempTile)
+                    x += tileX
+                y += tileY
         else:
             logPrint("\tFilling tilemap layout...")
             tileIndex = 0

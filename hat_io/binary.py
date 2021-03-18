@@ -84,9 +84,10 @@ class BinaryReader():
             out.extend(self.read(1))
         return out.decode(encoding)
     
-    def readPaddedString(self, length, encoding, padChar=b'\x00'):
-        out = self.read(length).split(padChar)
-        return out[0].decode(encoding)
+    # TODO - Convert all padding characters to actual characters - be weary of encoding though
+    def readPaddedString(self, length, encoding, padChar="\0"):
+        out = self.read(length).decode(encoding)
+        return out.split(padChar)[0]
 
 class BinaryWriter():
     def __init__(self):

@@ -1,3 +1,4 @@
+from typing import Callable, Optional
 from PIL import Image
 from .opcodes import *
 from .. import binary
@@ -129,7 +130,7 @@ class AnimatedImage():
         return animation
 
     @staticmethod
-    def fromBytesArc(data, functionGetFileByName=None):
+    def _fromBytesArcArj(data, functionGetFileByName : Optional[Callable], isArj:bool):
         output = AnimatedImage()
         workingAtlas = StaticImage()
         reader = binary.BinaryReader(data=data)
@@ -138,6 +139,9 @@ class AnimatedImage():
         givenBpp = 2 ** (reader.readU16() - 1)
         logPrint("Frames", countSubImage)
         logPrint("Bpp", givenBpp)
+
+        if isArj:
+            countColours = reader.readU32()
 
         tempWorkingImages           = []
         tempWorkingImageResolutions = []
@@ -150,13 +154,23 @@ class AnimatedImage():
             workingImage = TiledImageHandler()
             for _indexTile in range(countTiles):
                 # TODO - Are tiles written if empty?
+
+                if isArj:
+                    glb = (reader.readU16(), reader.readU16())
+
                 offset = (reader.readU16(), reader.readU16())
                 tileRes = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
-                workingImage.addTileFromReader(reader, prolongDecoding=True, resolution=tileRes, offset=offset, overrideBpp=givenBpp)
+
+                if isArj:
+                    workingImage.addTileFromReader(reader, prolongDecoding=True, glb=glb, resolution=tileRes, offset=offset, overrideBpp=givenBpp, useArjDecoding=True)
+                else:
+                    workingImage.addTileFromReader(reader, prolongDecoding=True, resolution=tileRes, offset=offset, overrideBpp=givenBpp)
             tempWorkingImages.append(workingImage)
             tempWorkingImageResolutions.append(resolution)
         
-        countColours = reader.readU32()
+        if not(isArj):
+            countColours = reader.readU32()
+
         palette = getPaletteAsListFromReader(reader, countColours)
         atlasKey = AnimatedImage.PREFIX_ARC_ATLAS_NAME + str(len(output.atlases))
         output.atlases[atlasKey] = workingAtlas
@@ -231,7 +245,15 @@ class AnimatedImage():
                     pass
 
         return output
+
+    @staticmethod
+    def fromBytesArc(data, functionGetFileByName=None):
+        return AnimatedImage._fromBytesArcArj(data, functionGetFileByName, False)
     
+    @staticmethod
+    def fromBytesArj(data, functionGetFileByName=None):
+        return AnimatedImage._fromBytesArcArj(data, functionGetFileByName, True)
+
     def toBytesArc(self, exportVariables=False):
 
         # Squashes all frames into one ARC. Palette is shared so potential to lose much quality

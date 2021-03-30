@@ -3,11 +3,12 @@ from ..binary import BinaryReader
 
 class NazoData(File):
     def __init__(self):
+        # TODO - Make init consistent
         super().__init__()
         self.idExternal = None
         self.idTutorial = None
         self.idHandler = None
-        self.idReward = None
+        self.idReward = -1
 
         self.picaratDecayStages = [0,0,0]
         

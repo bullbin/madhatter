@@ -144,10 +144,12 @@ class TileProlongedDecode(Tile):
         self.decodingData = b''
         self.bpp = 0
         self.needsDecode = True
+        self.useArjDecoding = False
     
     @staticmethod
-    def fromBytes(data, resolution, bpp, palette):
+    def fromBytes(data, resolution, bpp, palette, useArjDecoding=False):
         output = TileProlongedDecode()
+        output.useArjDecoding = useArjDecoding
         output.setImageFromBytes(data, resolution, bpp, palette)
         return output
     
@@ -160,17 +162,36 @@ class TileProlongedDecode(Tile):
         if self.needsDecode:
             self.image.putpalette(palette)
             width, height = self.image.size
-            x = 0
-            y = 0
-            for indexPixel in range(width * height * self.bpp // 8):
-                packedPixel = self.decodingData[indexPixel]
-                for _indexSubPixel in range(8 // self.bpp):
-                    self.image.putpixel((x,y), (packedPixel & ((2 ** self.bpp) - 1)) % (len(palette) // 3))
-                    packedPixel = packedPixel >> self.bpp
-                    x += 1
-                    if x == width:
-                        y += 1
-                        x = 0
+
+            if self.useArjDecoding:
+                pixelIndex = 0
+                for ht in range(height // 8):
+                    for wt in range(width // 8):
+                        for h in range(8):
+                            for w in range(8):
+                                if self.bpp == 4:
+                                    pixelByte = self.decodingData[pixelIndex // 2]
+                                    if pixelIndex % 2 == 1:
+                                        pixelByte = pixelByte >> self.bpp
+                                    pixelByte = pixelByte & ((2**self.bpp) - 1)
+                                else:
+                                    pixelByte = self.decodingData[pixelIndex]
+                                self.image.putpixel((w + wt * 8, h + ht * 8), pixelByte % (len(palette) // 3))
+                                pixelIndex += 1
+
+            else:
+                x = 0
+                y = 0
+                for indexPixel in range(width * height * self.bpp // 8):
+                    packedPixel = self.decodingData[indexPixel]
+                    for _indexSubPixel in range(8 // self.bpp):
+                        self.image.putpixel((x,y), (packedPixel & ((2 ** self.bpp) - 1)) % (len(palette) // 3))
+                        packedPixel = packedPixel >> self.bpp
+                        x += 1
+                        if x == width:
+                            y += 1
+                            x = 0
+
             self.needsDecode = False
 
 class TiledImageHandler():
@@ -230,14 +251,16 @@ class TiledImageHandler():
 
         logPrint("Palette set to", len(self.paletteRgbTriplets))
 
-    def addTileFromReader(self, reader, prolongDecoding=False, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET, overrideBpp=-1):
+    # TODO - Improve tile support for arj and rewrite to force typing (make more resilient)
+
+    def addTileFromReader(self, reader, prolongDecoding=False, useArjDecoding=False, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET, overrideBpp=-1):
         if overrideBpp != -1:
             bpp = overrideBpp
         else:
             bpp = self.getBpp()
         dataLength = int(resolution[0] * resolution[1] * bpp / 8)
         if prolongDecoding:
-            tempTile = TileProlongedDecode.fromBytes(reader.read(dataLength), resolution, bpp, self.paletteContinuous)
+            tempTile = TileProlongedDecode.fromBytes(reader.read(dataLength), resolution, bpp, self.paletteContinuous, useArjDecoding=useArjDecoding)
         else:
             tempTile = Tile.fromBytes(reader.read(dataLength), resolution, bpp, self.paletteContinuous)
         tempTile.setGlb(glb)

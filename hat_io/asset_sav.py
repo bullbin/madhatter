@@ -504,6 +504,7 @@ class Layton2SaveSlot():
         self.menuNewFlag            = FlagsAsArray(16)          # TODO - Read enabled state to disable any unwanted NEWs
         self.photoPieceFlag         = FlagsAsArray(16)
         self.tutorialFlag           = FlagsAsArray(16)
+        self.partyFlag              = FlagsAsArray(8)
 
         self.anthonyDiaryState      = EnableNewFlagState(12)
         self.idHeldAutoEvent        = -1
@@ -573,6 +574,7 @@ class Layton2SaveSlot():
         reader.seek(4,1)
 
         self.goal                   = reader.readU16()
+        self.partyFlag              = FlagsAsArray.fromBytes(reader.read(1))
 
         if self.roomIndex != self.headerRoomIndex:
             self.isTampered = True
@@ -636,6 +638,7 @@ class Layton2SaveSlot():
             data.pad(4, padChar = b'\x00')
 
             data.writeInt(self.goal, 4)
+            data.write(self.partyFlag.toBytes(outLength=1))
 
             # TODO - There's a few flags here
             writer.writeU32(calculateSaveChecksumFromData(data.data))

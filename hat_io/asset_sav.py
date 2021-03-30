@@ -637,8 +637,9 @@ class Layton2SaveSlot():
 
             data.pad(4, padChar = b'\x00')
 
-            data.writeInt(self.goal, 4)
+            data.writeU16(self.goal)
             data.write(self.partyFlag.toBytes(outLength=1))
+            data.pad(1)
 
             # TODO - There's a few flags here
             writer.writeU32(calculateSaveChecksumFromData(data.data))

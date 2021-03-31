@@ -180,6 +180,7 @@ class PlaceData(File):
         
         reader.seek(204)
         for bgIndex in range(12):
+            # TODO - Verification is actually on no path for anim
             self._objBgAni.append(BgAni.fromBytes(reader.read(32)))
             if self._objBgAni[-1].pos == (0,0):
                 self._objBgAni.pop()

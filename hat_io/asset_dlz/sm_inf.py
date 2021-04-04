@@ -2,8 +2,8 @@
 # Controls how and when the guiding arrows ("HERE!") on the map are displayed
 
 from typing import Optional
-from hat_io.binary import BinaryReader, BinaryWriter
-from hat_io.asset_dlz.generic_dlz import DlzData, DlzEntryNull
+from ..binary import BinaryReader, BinaryWriter
+from .generic_dlz import DlzData, DlzEntryNull
 
 class DlzEntrySubmapInfo(DlzEntryNull):
 

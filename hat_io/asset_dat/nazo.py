@@ -54,7 +54,7 @@ class NazoData(File):
         reader.seek(2,1)    # Skip sound mode
 
         self.bgSubId = reader.readUInt(1)
-        self.idReward = reader.readUInt(1)
+        self.idReward = reader.readInt(1)
 
         self.textPrompt = seekAndReadNullTerminatedString(lengthHeader + reader.readU32())
         self.textCorrect = seekAndReadNullTerminatedString(lengthHeader + reader.readU32())

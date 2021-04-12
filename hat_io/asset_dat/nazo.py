@@ -12,8 +12,11 @@ class NazoData(File):
 
         self.picaratDecayStages = [0,0,0]
         
-        self.flagUseLanguageBackground = False
-        self.flagUseLukeAsSolver = False
+        self.__flagUseLukeAsSolver              = False
+        self.__flagUseLukeVoiceLines            = False
+        self.__flagPuzzleHasAnswerBackground    = False
+        self.__flagUseLanguagePromptBackground  = False
+        self.__flagUseLanguageAnswerBackground  = False
 
         self.indexPlace = None
         
@@ -44,8 +47,11 @@ class NazoData(File):
         self.picaratDecayStages = [reader.readUInt(1), reader.readUInt(1), reader.readUInt(1)]
         
         flags = reader.readUInt(1)
-        self.flagUseLukeAsSolver = flags & 0x02 != 0
-        self.flagUseLanguageBackground = flags & 0x20 != 0
+        self.__flagUseLukeAsSolver              = flags & 0x01 == 0
+        self.__flagUseLukeVoiceLines            = flags & 0x02 != 0
+        self.__flagPuzzleHasAnswerBackground    = flags & 0x10 != 0
+        self.__flagUseLanguagePromptBackground  = flags & 0x20 != 0
+        self.__flagUseLanguageAnswerBackground  = flags & 0x40 != 0
 
         self.indexPlace = reader.readUInt(1)
         self.idHandler = reader.readUInt(1)
@@ -99,11 +105,17 @@ class NazoData(File):
             return self.picaratDecayStages[index]
         return None
 
-    def isBgLanguageDependent(self):
-        return self.flagUseLanguageBackground
+    def isBgPromptLanguageDependent(self):
+        return self.__flagUseLanguagePromptBackground
+    
+    def isBgAnswerLanguageDependent(self):
+        return self.__flagUseLanguageAnswerBackground
+    
+    def hasAnswerBg(self):
+        return self.__flagPuzzleHasAnswerBackground
     
     def isAltCharacterUsed(self):
-        return self.flagUseLukeAsSolver
+        return self.__flagUseLukeAsSolver
     
     def getBgMainIndex(self):
         return self.bgMainId

@@ -86,7 +86,7 @@ class BgAni():
 
 class EventEntry():
     def __init__(self):
-        self.bounding = (0,0,0,0)
+        self.bounding = BoundingBox(0,0,0,0)
         self.idImage = 0
         self.idEvent = 0
     
@@ -106,7 +106,7 @@ class PlaceData(File):
 
     def __init__(self):
         File.__init__(self)
-        self.indexPlace    = 0
+        self.idNamePlace    = 0
         self.bgMainId       = 0
         self.bgMapId        = 0
 
@@ -159,7 +159,7 @@ class PlaceData(File):
 
     def load(self, data):
         reader = BinaryReader(data=data)
-        placeIndex = reader.readU32()
+        self.idNamePlace = reader.readUInt(1)
         reader.seek(24)
         self.posMap = (reader.readUInt(1), reader.readUInt(1))
         self.bgMainId = reader.readUInt(1)

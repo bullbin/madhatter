@@ -485,7 +485,7 @@ class Layton2SaveSlot():
 
         self.puzzleData             = PuzzleState()
         self.roomHintData           = RoomHintState()
-        self.hintCoinEncountered    = 10 # Regen these
+        self.hintCoinEncountered    = 10 # TODO - Regen these
         self.hintCoinAvailable      = 10
         self.picarats               = 0
         
@@ -507,10 +507,15 @@ class Layton2SaveSlot():
         self.partyFlag              = FlagsAsArray(8)
 
         self.anthonyDiaryState      = EnableNewFlagState(12)
+        self.lastMemoPage           = 0
+        self.lastAccessedPuzzle     = 0                         # TODO - Internal or external?
+        self.codeInputFlags         = FlagsAsArray(16)          # TODO - Unknown length
+
         self.idHeldAutoEvent        = -1
         self.idImmediateEvent       = -1
 
         self.goal                   = 100
+        self._unk                   = 0                         # TODO - Flag is used, but don't know purpose yet
     
     def clear(self):
         self = Layton2SaveSlot()
@@ -520,7 +525,7 @@ class Layton2SaveSlot():
         self.isTampered = self.isTampered or (reader.readUInt(4) != calculateSaveChecksumFromData(reader.read(796)))
 
         reader.seek(4)
-        self.eventViewed = FlagsAsArray.fromBytes(reader.read(128))  # Something AutoEvent related, triggered whenever an AutoEvent plays
+        self.eventViewed = FlagsAsArray.fromBytes(reader.read(128))
         self.storyFlag = FlagsAsArray.fromBytes(reader.read(16))
         self.eventCounter = FlagsAsArray.fromBytes(reader.read(128))
 
@@ -535,7 +540,9 @@ class Layton2SaveSlot():
 
         reader.seek(4,1)
         
-        self.timeElapsed            = reader.readUInt(8)
+        self.timeElapsed            = reader.readUInt(4)
+
+        reader.seek(4,1) # TODO - Time overflow?
 
         self.minigameCameraState.setCameraAvailableFlags(reader.read(2))    # CameraSolved
         self.minigameCameraState.setCameraPiecesData(reader.read(20))
@@ -551,8 +558,9 @@ class Layton2SaveSlot():
         reader.seek(24,1)   # Unused?
 
         self.minigameHamsterState.setRecordData(reader.readUInt(1))
+        self._unk = reader.readUInt(1)
 
-        reader.seek(4,1)
+        reader.seek(3,1)
 
         self.memoFlag               = EnableNewFlagState.fromBytes(reader.read(32), 60, 16)
         self.mysteryState           = HandlerMysteryState.fromBytes(reader.read(6))
@@ -570,9 +578,9 @@ class Layton2SaveSlot():
         self.idHeldAutoEvent        = reader.readS16()
         self.idImmediateEvent       = reader.readS16()
         self.anthonyDiaryState      = EnableNewFlagState.fromBytes(reader.read(4), 12, 2)
-
-        reader.seek(4,1)
-
+        self.lastMemoPage           = reader.readUInt(1)
+        self.lastAccessedPuzzle     = reader.readUInt(1)
+        self.codeInputFlags         = FlagsAsArray.fromBytes(reader.read(2))
         self.goal                   = reader.readU16()
         self.partyFlag              = FlagsAsArray.fromBytes(reader.read(1))
 
@@ -617,8 +625,9 @@ class Layton2SaveSlot():
             data.pad(24, padChar = b'\x00')
 
             data.writeInt(self.minigameHamsterState.getRecordData(), 1)
+            data.writeInt(self._unk, 1)
 
-            data.pad(4, padChar = b'\x00')
+            data.pad(3, padChar = b'\x00')
 
             data.write(self.memoFlag.toBytes(16))
             data.write(self.mysteryState.toBytes())
@@ -634,14 +643,14 @@ class Layton2SaveSlot():
             data.writeInt(self.idHeldAutoEvent, 2, signed=True)
             data.writeInt(self.idImmediateEvent, 2, signed=True)
             data.write(self.anthonyDiaryState.toBytes(2))
-
-            data.pad(4, padChar = b'\x00')
-
+            data.writeInt(self.lastMemoPage, 1)
+            data.writeInt(self.lastAccessedPuzzle, 1)
+            data.write(self.codeInputFlags.toBytes(outLength=2))
             data.writeU16(self.goal)
             data.write(self.partyFlag.toBytes(outLength=1))
+
             data.pad(1)
 
-            # TODO - There's a few flags here
             writer.writeU32(calculateSaveChecksumFromData(data.data))
             writer.write(data.data)
         else:
@@ -720,11 +729,9 @@ class Layton2SaveFile(File):
                     self.getSlotData(slotId).headerRoomIndex = reader.readUInt(1)
                     reader.seek(23,1)   # Bleed from string data, doesn't contain anything relevant
                     self.getSlotData(slotId).headerTimeElapsed = reader.readU32()
-                    
-                    # Is this the right way round?
-                    self.getSlotData(slotId).headerPuzzleCountSolved = reader.readU16()
-                    self.getSlotData(slotId).headerPuzzleCountEncountered = reader.readU16()
 
+                    self.getSlotData(slotId).headerPuzzleCountEncountered = reader.readU16()
+                    self.getSlotData(slotId).headerPuzzleCountSolved = reader.readU16()
                     self.getSlotData(slotId).isComplete = (reader.readUInt(1) == 1)
                     reader.seek(11,1)   # Unused?
                 else:
@@ -764,8 +771,8 @@ class Layton2SaveFile(File):
                 header.writeInt(saveSlot.timeElapsed, 4)
 
                 solved, encountered = saveSlot.getSolvedAndEncounteredPuzzleCount()
-                header.writeInt(solved, 2)
                 header.writeInt(encountered, 2)
+                header.writeInt(solved, 2)
                 header.writeInt(saveSlot.isComplete, 1)
                 header.pad(11)
             

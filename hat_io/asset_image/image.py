@@ -1,13 +1,13 @@
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 from PIL import Image
+from PIL.Image import Image as ImageType
 from .opcodes import *
 from .. import binary
-from ...common import Rect
 from ...common import log as logPrint
-from ..asset import File, LaytonPack2
+from ..asset import LaytonPack2
 from ..asset_script import LaytonScript
 from math import log
-from .tiler import Tile, TiledImageHandler, getPaletteFromImages
+from .tiler import TiledImageHandler, getPaletteFromImages
 from .colour import getPaletteAsListFromReader, getPackedColourFromRgb888
 from ..const import ENCODING_DEFAULT_STRING
 
@@ -40,14 +40,22 @@ class AnimationFrame():
     def __init__(self):
         self.name = ""
         self.dimensions = (0,0)
-        self.imageComponents = []
+        self.imageComponents : List[AnimationFramePartialDetails] = []
 
-    def getComposedFrame(self): # TODO : Store transparent version of atlas to avoid alpha reprocessing
+    def getComposedFrame(self) -> ImageType: # TODO : Store transparent version of atlas to avoid alpha reprocessing
+        """Returns image copy which is guarenteed to be the full contents of the frame, with all components pasted correctly.
+        Where possible, paletted images are preserved.
+
+        This method is critical for LT3 images and LT2 images with loaded subanimations or the extracted data will be in pieces.
+
+        Returns:
+            ImageType: Copied version of frame with parts merged together, ready for display or exporting
+        """
         reusePalette = True
         targetPalette = None
         for frameRef in self.imageComponents:
             targetImage = frameRef.atlasImageReference.getImage(frameRef.atlasSubImageIndex)
-            targetImage : Image
+            targetImage : ImageType
             if targetImage.mode == "P":
                 if targetPalette == None:
                     targetPalette = targetImage.getpalette()
@@ -86,10 +94,10 @@ class AnimationKeyframe():
 
 class Animation():
     def __init__(self):
-        self.name                        = ""
-        self.keyframes                   = []
-        self.subAnimationIndex  = None
-        self.subAnimationOffset = (0,0)
+        self.name                       = ""
+        self.keyframes                  = []
+        self.subAnimationIndex          = None
+        self.subAnimationOffset         = (0,0)
     
     def addKeyframe(self, frame):
         self.keyframes.append(frame)
@@ -114,15 +122,15 @@ class AnimatedImage():
     PREFIX_ARC_ATLAS_NAME = "ARC"
 
     def __init__(self):
-        self.atlases = {}
-        self.frames = []
-        self.animations = []
-        self.variables = {}
+        self.atlases    : Dict[str, StaticImage]    = {}
+        self.frames     : List[AnimationFrame]      = []
+        self.animations : List[Animation]           = []
+        self.variables  : Dict[str, List[int]]      = {}
 
         for index in range(1,17):
             self.variables["Var" + str(index)] = [0,0,0,0,0,0,0,0]
 
-        self.subAnimation = None
+        self.subAnimation : Optional[AnimatedImage] = None
     
     def normaliseAnimation(self, animation):
         # Merge subanimation and animation by looking at subanimation cycle and merging
@@ -254,7 +262,176 @@ class AnimatedImage():
     def fromBytesArj(data, functionGetFileByName=None):
         return AnimatedImage._fromBytesArcArj(data, functionGetFileByName, True)
 
-    def toBytesArc(self, exportVariables=False):
+    @staticmethod
+    def fromBytesArcHd(data : bytes, atlas : ImageType, functionGetFileByName : Optional[Callable[[str], Tuple[bytes, Optional[ImageType]]]] = None):
+        # TODO - Move some code from original arc routine, HD follows almost same code (but switches to png for storage)
+        output                  = AnimatedImage()
+        reader                  = binary.BinaryReader(data = data)
+        countSubImage   : int   = reader.readU32()
+        workingAtlas            = StaticImage()
+
+        for indexSubImage in range(countSubImage):
+            cropOffset : Tuple[int,int] = (reader.readS16(), reader.readS16())
+            dimensions : Tuple[int,int] = (reader.readU16(), reader.readU16())
+            workingAtlas.addImage(atlas.crop((cropOffset[0], cropOffset[1],
+                                              cropOffset[0] + dimensions[0], cropOffset[1] + dimensions[1])))
+            
+            workingFrame = AnimationFrame()
+            workingFrame.name = str(indexSubImage)
+            workingFrame.dimensions = workingAtlas.getImage(indexSubImage).size
+            workingFrame.imageComponents.append(AnimationFramePartialDetails(workingAtlas, indexSubImage))
+            output.frames.append(workingFrame)
+        
+        output.atlases["MAIN_HD"] = workingAtlas
+        
+        reader.seek(30,1)
+
+        countAnim : int = reader.readU32()
+        for animIndex in range(countAnim):
+            workingAnim = Animation()
+            workingAnim.setName(reader.readPaddedString(30, ENCODING_DEFAULT_STRING))
+            output.animations.append(workingAnim)
+
+        for indexAnim in range(countAnim):
+            countKeyframes  = reader.readU32()
+            indexImage      = reader.readU32List(countKeyframes)
+            duration        = reader.readU32List(countKeyframes)
+            indexFrame      = reader.readU32List(countKeyframes)
+            orderedKeyframes = {}
+
+            for indexOrderingFrame in range(countKeyframes):
+                workingFrame = AnimationKeyframe()
+                workingFrame.duration = duration[indexOrderingFrame]
+                workingFrame.indexFrame = indexFrame[indexOrderingFrame]
+                orderedKeyframes[indexImage[indexOrderingFrame]] = workingFrame
+
+            orderedKeyframeIndices = list(orderedKeyframes.keys())
+            orderedKeyframeIndices.sort()
+            for sortedIndex in orderedKeyframeIndices:
+                output.animations[animIndex].addKeyframe(orderedKeyframes[sortedIndex])
+        
+        if reader.read(2) == b'\x34\x12':
+            # TODO - Var marker constant. Also restructure to cache arguments to avoid holding files too long
+            variableNames = []
+            output.variables = {}
+
+            for indexData in range(16):
+                name = reader.readPaddedString(16, ENCODING_DEFAULT_STRING)
+                variableNames.append(name)
+                output.variables[name] = [0,0,0,0,0,0,0,0]
+
+            for indexData in range(8):
+                for indexVariable in range(16):
+                    output.variables[variableNames[indexVariable]][indexData] = reader.readS16()
+            
+            offsetSubAnimationData = reader.tell()
+            if callable(functionGetFileByName):
+                try:
+                    reader.seek(int(5 * countAnim), 1)
+                    nameSubAnimation = reader.readPaddedString(128, ENCODING_DEFAULT_STRING)
+                    if nameSubAnimation != "":
+                        subAnimationData, subAnimationImage = functionGetFileByName(nameSubAnimation)
+                        if subAnimationData != None:
+                            output.subAnimation = AnimatedImage.fromBytesArcHd(subAnimationData, subAnimationImage, functionGetFileByName=functionGetFileByName)
+
+                            reader.seek(offsetSubAnimationData)
+                            tempOffset = [[],[]]
+                            for indexDimension in range(2):
+                                for indexOffset in range(countAnim):
+                                    tempOffset[indexDimension].append(reader.readS16())
+                            for indexAnim in range(countAnim):
+                                output.animations[indexAnim].subAnimationOffset = (tempOffset[0][indexAnim], tempOffset[1][indexAnim])
+                                output.animations[indexAnim].subAnimationIndex = reader.readUInt(1)
+
+                except:
+                    pass
+
+        return output
+
+    def _writeArcVariable(self, writer : binary.BinaryWriter):
+        # TODO - Ensure 16 variables!
+        writer.write(b'\x34\x12')
+        for variableName in self.variables:
+            writer.writePaddedString(variableName, 16, ENCODING_DEFAULT_STRING)
+
+        for indexData in range(8):
+            for variableName in self.variables:
+                writer.writeInt(self.variables[variableName][indexData], 2, signed=True)
+        
+        for anim in self.animations:
+            writer.writeS16(anim.subAnimationOffset[0])
+        for anim in self.animations:
+            writer.writeS16(anim.subAnimationOffset[1])
+        for anim in self.animations:
+            if type(anim.subAnimationIndex) == int:
+                writer.writeInt(anim.subAnimationIndex, 1)
+            else:
+                writer.writeInt(0, 1)
+        
+        # TODO - SubAnimation naming?
+        writer.writePaddedString("", 128, ENCODING_DEFAULT_STRING)
+
+    def toBytesArcHd(self, exportVariables=False) -> Tuple[bytes, ImageType]:
+        # TODO - Similar to place data, separate this properly to make HD vs non-HD identifiable
+        # Squashes all frames into one ARC (HD). No palette is used, so these is no risk of quality loss but memory loss can be high.
+        # TODO - Find good infinite 2D bin-packing algorithm for packing images efficiently
+
+        writer : binary.BinaryWriter    = binary.BinaryWriter()
+
+        maxX : int = 0
+        maxY : int = 0
+
+        # Get composed images (fixes LT3 images)
+        images : List[ImageType] = []
+        for frame in self.frames:
+            compositedFrame = frame.getComposedFrame()
+            maxX += compositedFrame.width
+            maxY = max(compositedFrame.height, maxY)
+            images.append(compositedFrame)
+        
+        if maxX == 0 or maxY == 0:
+            return (b'', None)
+        
+        atlas = Image.new('RGBA', (maxX, maxY))
+
+        # TODO - Inefficient bin packing...
+
+        writer.writeU32(len(images))
+        x = 0
+        for image in images:
+            writer.writeU16(x)
+            writer.writeU16(0)
+            writer.writeU16(image.width)
+            writer.writeU16(image.height)
+            atlas.paste(image, box=(x,0))
+            x += image.width
+
+        writer.pad(30)
+        writer.writeU32(len(self.animations))
+        for anim in self.animations:
+            writer.writePaddedString(anim.name, 30, ENCODING_DEFAULT_STRING)
+
+        for anim in self.animations:
+            writer.writeU32(len(anim.keyframes))
+            for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                writer.writeU32(indexKeyframe)
+            for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                writer.writeU32(keyframe.duration)
+            for indexKeyframe, keyframe in enumerate(anim.keyframes):
+                # TODO - In this in order?
+                # TODO - Bugfix, this is broken. Order is saved but the input is reordered, so needs correcting on input to not skew order.
+                # TODO - Also a problem on normal input!
+                writer.writeU32(keyframe.indexFrame)
+        
+        if exportVariables:
+            self._writeArcVariable(writer)
+        else:
+            writer.write(b'\x00\x00')
+        writer.write(b'\x00\x00')
+        
+        return (writer.data, atlas)
+
+    def toBytesArc(self, exportVariables=False) -> Optional[bytes]:
 
         # Squashes all frames into one ARC. Palette is shared so potential to lose much quality
         # TODO - When input is an ARC, no requantization should be done (unless a face, but should be worked around).
@@ -277,7 +454,7 @@ class AnimatedImage():
                 packedImages.append(workingImage)
                 packedDimensions.append((width,height))
             
-            writer = binary.BinaryWriter()
+            writer : binary.BinaryWriter = binary.BinaryWriter()
             writer.writeU16(len(images))
 
             encodedBpp = int(log(packedImages[0].getBpp(), 2) + 1)
@@ -317,18 +494,8 @@ class AnimatedImage():
                     writer.writeU32(keyframe.indexFrame)
             
             if exportVariables:
-                writer.write(b'\x34\x12')
-                for variableName in self.variables:
-                    writer.writePaddedString(variableName, 16, ENCODING_DEFAULT_STRING)
-                
-                writer : binary.BinaryWriter
-
-                for indexData in range(8):
-                    for variableName in self.variables:
-                        writer.writeInt(self.variables[variableName][indexData], 2, signed=True)
-                        
-                # TODO - Is this Layton2 specific?
-                writer.pad(203) # TODO - Read variables and subanimation
+                self._writeArcVariable(writer)
+            writer.write(b'\x00\x00')
 
             return writer.data
         return None
@@ -396,7 +563,7 @@ class StaticImage():
     def __init__(self):
         self.subImages = []
     
-    def addImage(self, image:Image):
+    def addImage(self, image : ImageType):
         self.subImages.append(image)
 
     def getImage(self, indexImage):

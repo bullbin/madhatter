@@ -15,12 +15,22 @@ class BoundingBox():
 class HintCoin():
     def __init__(self):
         self.bounding = BoundingBox(0,0,0,0)
+
+    @staticmethod
+    def getLength(isHd : bool):
+        if isHd:
+            return 8
+        else:
+            return 4
     
     @staticmethod
-    def fromBytes(data):
+    def fromBytes(data, isHd : bool = False):
         reader = BinaryReader(data=data)
         output = HintCoin()
-        output.bounding = BoundingBox(reader.readUInt(1), reader.readUInt(1), reader.readUInt(1), reader.readUInt(1))
+        if isHd:
+            output.bounding = BoundingBox(reader.readUInt(2), reader.readUInt(2), reader.readUInt(2), reader.readUInt(2))
+        else:
+            output.bounding = BoundingBox(reader.readUInt(1), reader.readUInt(1), reader.readUInt(1), reader.readUInt(1))
         return output
 
 class Exit():
@@ -35,15 +45,28 @@ class Exit():
         self.spawnData      = 0
     
     @staticmethod
-    def fromBytes(data):
+    def getLength(isHd : bool):
+        if isHd:
+            return 18
+        else:
+            return 12
+    
+    @staticmethod
+    def fromBytes(data, isHd : bool = False):
+        # TODO - Separate NDS and HD into own items from this so scaling behaviour can be handled.
+        if isHd:
+            sizePosition = 2
+        else:
+            sizePosition = 1
+
         reader = BinaryReader(data=data)
         output = Exit()
-        output.bounding = BoundingBox(reader.readUInt(1), reader.readUInt(1), reader.readUInt(1), reader.readUInt(1))
+        output.bounding = BoundingBox(reader.readUInt(sizePosition), reader.readUInt(sizePosition), reader.readUInt(sizePosition), reader.readUInt(sizePosition))
         output.idImage = reader.readUInt(1)
         output.modeDecoding = reader.readUInt(1)
         reader.seek(1,1)
         output.idSound = reader.readUInt(1)
-        output.posTransition = (reader.readUInt(1), reader.readUInt(1))
+        output.posTransition = (reader.readUInt(sizePosition), reader.readUInt(sizePosition))
         output.spawnData = reader.readU16()
         return output
 
@@ -63,10 +86,22 @@ class TObjEntry():
         self.idTObj = 0
     
     @staticmethod
-    def fromBytes(data):
+    def getLength(isHd : bool):
+        if isHd:
+            return 14
+        else:
+            return 10
+    
+    @staticmethod
+    def fromBytes(data, isHd : bool = False):
+        if isHd:
+            sizePosition = 2
+        else:
+            sizePosition = 1
+
         reader = BinaryReader(data=data)
         output = TObjEntry()
-        output.bounding = BoundingBox(reader.readUInt(1), reader.readUInt(1), reader.readUInt(1), reader.readUInt(1))
+        output.bounding = BoundingBox(reader.readUInt(sizePosition), reader.readUInt(sizePosition), reader.readUInt(sizePosition), reader.readUInt(sizePosition))
         output.idChar = reader.readU16()
         output.idTObj = reader.readU32()
         return output
@@ -77,10 +112,22 @@ class BgAni():
         self.name = ""
     
     @staticmethod
-    def fromBytes(data):
+    def getLength(isHd : bool):
+        if isHd:
+            return 34
+        else:
+            return 32
+
+    @staticmethod
+    def fromBytes(data, isHd : bool = False):
+        if isHd:
+            sizePosition = 34
+        else:
+            sizePosition = 32
+
         reader = BinaryReader(data=data)
         output = BgAni()
-        output.pos = (reader.readUInt(1), reader.readUInt(1))
+        output.pos = (reader.readUInt(sizePosition), reader.readUInt(sizePosition))
         output.name = reader.readPaddedString(30, ENCODING_DEFAULT_STRING)
         return output
 
@@ -91,18 +138,30 @@ class EventEntry():
         self.idEvent = 0
     
     @staticmethod
-    def fromBytes(data):
+    def getLength(isHd : bool):
+        if isHd:
+            return 12
+        else:
+            return 8
+
+    @staticmethod
+    def fromBytes(data, isHd : bool = False):
+        if isHd:
+            sizePosition = 2
+        else:
+            sizePosition = 1
+
         reader = BinaryReader(data=data)
         output = EventEntry()
-        output.bounding = BoundingBox(reader.readUInt(1), reader.readUInt(1), reader.readUInt(1), reader.readUInt(1))
+        output.bounding = BoundingBox(reader.readUInt(sizePosition), reader.readUInt(sizePosition), reader.readUInt(sizePosition), reader.readUInt(sizePosition))
         output.idImage = reader.readU16()
         output.idEvent = reader.readU16()
         return output
 
 class PlaceData(File):
     # Used to access room data, which includes animation positions, room connections and event objects.
-    # Only the NDS variant of place data is supported. Android versions follow similar suit, but
-    # field lengths are changed to adjust for larger screen resolution.
+    
+    # TODO - Test HD version. NDS and HD should now both be supported
 
     def __init__(self):
         File.__init__(self)
@@ -156,46 +215,71 @@ class PlaceData(File):
         if 0 <= indexExit < self.getCountExits():
             return self._exits[indexExit]
         return None
-
-    def load(self, data):
+    
+    def _load(self, data, isHd : bool = False):
         reader = BinaryReader(data=data)
         self.idNamePlace = reader.readUInt(1)
         reader.seek(24)
-        self.posMap = (reader.readUInt(1), reader.readUInt(1))
+        if isHd:
+            self.posMap = (reader.readUInt(2), reader.readUInt(2))
+        else:
+            self.posMap = (reader.readUInt(1), reader.readUInt(1))
+
         self.bgMainId = reader.readUInt(1)
         self.bgMapId = reader.readUInt(1)
 
         for hintCoinIndex in range(4):
-            self._objHints.append(HintCoin.fromBytes(reader.read(4)))
+            self._objHints.append(HintCoin.fromBytes(reader.read(HintCoin.getLength(isHd)), isHd))
             if self._objHints[-1].bounding.isEmpty():
                 self._objHints.pop()
+                reader.seek(reader.tell() + (HintCoin.getLength(isHd) * (3 - hintCoinIndex)))
                 break
 
-        reader.seek(44)
         for tObjIndex in range(16):
-            self._objText.append(TObjEntry.fromBytes(reader.read(10)))
+            self._objText.append(TObjEntry.fromBytes(reader.read(TObjEntry.getLength(isHd)), isHd))
             if self._objText[-1].bounding.isEmpty():
                 self._objText.pop()
+                reader.seek(reader.tell() + (TObjEntry.getLength(isHd) * (15 - tObjIndex)))
                 break
         
-        reader.seek(204)
         for bgIndex in range(12):
             # TODO - Verification is actually on no path for anim
-            self._objBgAni.append(BgAni.fromBytes(reader.read(32)))
+            self._objBgAni.append(BgAni.fromBytes(reader.read(BgAni.getLength(isHd)), isHd))
             if self._objBgAni[-1].pos == (0,0):
                 self._objBgAni.pop()
+                reader.seek(reader.tell() + (BgAni.getLength(isHd) * (11 - bgIndex)))
                 break
         
-        reader.seek(588)
         for eventIndex in range(16):
-            self._objEvents.append(EventEntry.fromBytes(reader.read(8)))
+            self._objEvents.append(EventEntry.fromBytes(reader.read(EventEntry.getLength(isHd)), isHd))
             if self._objEvents[-1].bounding.isEmpty():
                 self._objEvents.pop()
+                reader.seek(reader.tell() + (EventEntry.getLength(isHd) * (15 - eventIndex)))
                 break
 
-        reader.seek(716)
         for exitIndex in range(12):
-            self._exits.append(Exit.fromBytes(reader.read(12)))
+            self._exits.append(Exit.fromBytes(reader.read(Exit.getLength(isHd)), isHd))
             if self._exits[-1].bounding.isEmpty():
                 self._exits.pop()
+                reader.seek(reader.tell() + (Exit.getLength(isHd) * (11 - exitIndex)))
                 break
+
+    def _loadHd(self, data):
+        self._load(data, True)
+    
+    def _loadNds(self, data):
+        self._load(data, False)
+
+class PlaceDataNds(PlaceData):
+    def __init__(self):
+        super().__init__()
+
+    def load(self, data):
+        self._loadNds(data)
+
+class PlaceDataHd(PlaceData):
+    def __init__(self):
+        super().__init__()
+    
+    def load(self, data):
+        self._loadHd(data)

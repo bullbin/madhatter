@@ -1,5 +1,7 @@
+from typing import List, Tuple
+from .const import NAZO_MAX_STRING_BANK_LENGTH_HD, NAZO_MAX_STRING_BANK_LENGTH_NDS, NAZO_SIZE_HD
 from ..asset import File
-from ..binary import BinaryReader
+from ..binary import BinaryReader, BinaryWriter
 
 class NazoData(File):
     def __init__(self):
@@ -29,7 +31,16 @@ class NazoData(File):
         self.textCorrect = ""
         self.textIncorrect = ""
 
-    def load(self, data):
+    def _load(self, data : bytes, isHd : bool) -> bool:
+        """Load Nazo data block. Abstractions are recommended instead of direct interaction with object.
+
+        Args:
+            data (bytes): Bytes-like object containing Nazo data
+            isHd (bool): True if file type is from HD ports
+
+        Returns:
+            bool: True if loading was successful
+        """
 
         reader = BinaryReader(data=data)
 
@@ -41,8 +52,17 @@ class NazoData(File):
             return output
 
         self.idExternal = reader.readU16()
-        lengthHeader = reader.readU16()
-        self.textName = reader.readPaddedString(48, 'shift-jis')
+
+        if isHd:
+            lengthHeader = 112
+            reader.seek(2,1)
+            self.textName = reader.readPaddedString(72, 'shift-jis')
+        else:
+            lengthHeader = reader.readU16()
+            self.textName = reader.readPaddedString(48, 'shift-jis')
+
+        # TODO - Make enum for tutorial and abstract to ensure validity
+        # TODO - Abstract picarat to ensure cannot be out of bounds
         self.idTutorial = reader.readUInt(1)
         self.picaratDecayStages = [reader.readUInt(1), reader.readUInt(1), reader.readUInt(1)]
         
@@ -54,6 +74,7 @@ class NazoData(File):
         self.__flagUseLanguageAnswerBackground  = flags & 0x40 != 0
 
         self.indexPlace = reader.readUInt(1)
+        # TODO - Another enum for handler
         self.idHandler = reader.readUInt(1)
         self.bgMainId = reader.readUInt(1)
 
@@ -69,6 +90,74 @@ class NazoData(File):
             self.setHintAtIndex(indexHint, seekAndReadNullTerminatedString(lengthHeader + reader.readU32()))
         
         return True
+
+    def _saveFlags(self, writer : BinaryWriter):
+        writer.writeInt(self.idTutorial, 1)
+        writer.writeIntList(self.picaratDecayStages, 1)
+        flagBit = (self.__flagUseLukeAsSolver | (self.__flagUseLukeVoiceLines << 1)) | (self.__flagPuzzleHasAnswerBackground << 4)
+        flagBit = (flagBit | (self.__flagUseLanguagePromptBackground << 5)) | (self.__flagUseLanguagePromptBackground << 6)
+        writer.writeInt(flagBit, 1)
+        writer.writeInt(self.indexPlace, 1)
+        writer.writeInt(self.idHandler, 1)
+        writer.writeInt(self.bgMainId, 1)
+        
+        writer.pad(2)
+
+        writer.writeInt(self.bgSubId, 1)
+        writer.writeInt(self.idReward, 1)
+
+    def _saveStrings(self, maxLength : int) -> Tuple[BinaryWriter, List[int]]:
+        """Generates the string bank for Nazo data. If a string is too long to fit in the remaining space in the bank,
+        it is skipped. If that is not possible, the results of the previous string is referenced instead.
+
+        Args:
+            maxLength (int): Maximum size of string partition
+
+        Returns:
+            Tuple[BinaryWriter, List[int]]: Writer containing data block and list of relative offsets for use in header
+        """
+        output = BinaryWriter()
+        stringWriter = BinaryWriter()
+
+        outputOffset = []
+        for text in [self.textPrompt, self.textCorrect, self.textIncorrect] + self.textHint:
+            stringWriter.clear()
+            stringWriter.writeString(text, 'shift-jis')
+            if output.tell() + stringWriter.tell() <= maxLength:
+                outputOffset.append(output.tell())
+                output.write(stringWriter.data)
+            else:
+                if maxLength - output.tell() >= 1:
+                    outputOffset.append(output.tell())
+                    output.write(b'\x00')
+                else:
+                    # This is safe because its not possible for it to fail on first time - above fallback will kick in
+                    outputOffset.append(outputOffset[-1])
+        
+        return (output, outputOffset)
+
+    def _saveNds(self):
+        writer : BinaryWriter = BinaryWriter()
+        writer.writeU16(self.idExternal)
+        writer.writeU16(112)
+        writer.writePaddedString(self.name, 48, 'shift-jis')
+        self._saveFlags(writer)
+        bankWriter, bankOffsets = self._saveStrings(NAZO_MAX_STRING_BANK_LENGTH_NDS)
+        writer.writeIntList(bankOffsets, 4)
+        writer.align(112)
+        writer.write(bankWriter.data)
+
+    def _saveHd(self):
+        writer : BinaryWriter = BinaryWriter()
+        writer.writeU16(self.idExternal)
+        writer.pad(2)
+        writer.writePaddedString(self.name, 72, 'shift-jis')
+        self._saveFlags(writer)
+        bankWriter, bankOffsets = self._saveStrings(NAZO_MAX_STRING_BANK_LENGTH_HD)
+        writer.writeIntList(bankOffsets, 4)
+        writer.align(112)
+        writer.write(bankWriter.data)
+        writer.align(NAZO_SIZE_HD)
 
     def setHintAtIndex(self, indexHint, text):
         if 0 <= indexHint < len(self.textHint) and type(text) == str:
@@ -122,3 +211,23 @@ class NazoData(File):
 
     def getBgSubIndex(self):
         return self.bgSubId
+
+class NazoDataNds(NazoData):
+    def  __init__(self):
+        super().__init__()
+
+    def load(self, data: bytes) -> bool:
+        return super()._load(data, False)
+    
+    def save(self):
+        return self._saveNds()
+
+class NazoDataHd(NazoData):
+    def  __init__(self):
+        super().__init__()
+
+    def load(self, data: bytes) -> bool:
+        return super()._load(data, True)
+    
+    def save(self):
+        return self._saveHd()

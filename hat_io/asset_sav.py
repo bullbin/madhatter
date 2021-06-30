@@ -1,3 +1,4 @@
+from typing import Optional
 from . import binary
 from .asset import File
 from .const import ENCODING_DEFAULT_STRING
@@ -422,9 +423,9 @@ class PuzzleState():
         for _puzzleIndex in range(PuzzleState.MAX_PUZZLE_COUNT):
             self.puzzleBank.append(PuzzleData())
     
-    def getPuzzleData(self, internalIndex):
-        if internalIndex >= 0 and internalIndex < PuzzleState.MAX_PUZZLE_COUNT:
-            return self.puzzleBank[internalIndex]
+    def getPuzzleData(self, idExternal) -> Optional[PuzzleData]:
+        if idExternal >= 0 and idExternal < PuzzleState.MAX_PUZZLE_COUNT:
+            return self.puzzleBank[idExternal]
         return None
     
     def setPuzzleBankFromBytes(self, data):

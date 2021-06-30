@@ -93,6 +93,9 @@ class BinaryWriter():
     def __init__(self):
         self.data = bytearray(b'')
     
+    def clear(self):
+        self.data = bytearray(b'')
+    
     def tell(self):
         return len(self.data)
 
@@ -122,6 +125,7 @@ class BinaryWriter():
     def writePaddedString(self, data, length, encoding, padChar=b'\x00'):
         data = data.encode(encoding)
         if len(data) > length:
+            # TODO - Breaks multibyte characters...
             self.data.extend(data[:length])
         else:
             self.data.extend(data + (padChar * (length - len(data))))

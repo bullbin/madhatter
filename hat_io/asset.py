@@ -335,9 +335,19 @@ class File():
             return False
     
     def save(self):
+        """Converts the object state into its original binary form.
+        """
         pass
 
-    def export(self, filepath):
+    def export(self, filepath : str) -> bool:
+        """Writes the binary form into new file at the provided filepath. Will overwrite existing contents.
+
+        Args:
+            filepath (str): Filepath for output. Can be relative or absolute
+
+        Returns:
+            bool: True if operation was successful
+        """
         # Add a method to BinaryWriter to do this
         try:
             if self.extension != '':

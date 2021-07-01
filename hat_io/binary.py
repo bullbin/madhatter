@@ -151,6 +151,9 @@ class BinaryWriter():
     
     def writeU64(self, data):
         self.writeInt(data, 8)
+    
+    def writeS16(self, data):
+        self.writeInt(data, 2, signed=True)
 
     def writeS32(self, data):
         self.writeInt(data, 4, signed=True)

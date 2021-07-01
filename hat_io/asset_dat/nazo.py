@@ -213,6 +213,7 @@ class NazoData(File):
         return self.bgSubId
 
 class NazoDataNds(NazoData):
+    # TODO - Format conversions
     def  __init__(self):
         super().__init__()
 
@@ -220,7 +221,9 @@ class NazoDataNds(NazoData):
         return super()._load(data, False)
     
     def save(self):
-        return self._saveNds()
+        """Overwrites stored byte representation with current NDS state. If string size is too long, it will be skipped.
+        """
+        self._saveNds()
 
 class NazoDataHd(NazoData):
     def  __init__(self):
@@ -230,4 +233,6 @@ class NazoDataHd(NazoData):
         return super()._load(data, True)
     
     def save(self):
-        return self._saveHd()
+        """Overwrites stored byte representation with current HD state. If string size is too long, it will be skipped.
+        """
+        self._saveHd()

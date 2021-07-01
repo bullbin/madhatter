@@ -1,9 +1,11 @@
+from typing import Optional
 from ..asset import File
 from ..binary import BinaryReader, BinaryWriter
 from ..const import ENCODING_DEFAULT_STRING
 
 class BoundingBox():
     def __init__(self, x, y, width, height):
+        # TODO - Maybe support setting limits to prevent user from tampering out of bounds for writing
         self.x      = x
         self.y      = y
         self.width  = width
@@ -32,6 +34,14 @@ class HintCoin():
         else:
             output.bounding = BoundingBox(reader.readUInt(1), reader.readUInt(1), reader.readUInt(1), reader.readUInt(1))
         return output
+    
+    def toBytes(self, isHd : bool = False) -> bytes:
+        writer = BinaryWriter()
+        if isHd:
+            writer.writeIntList([self.bounding.x, self.bounding.y, self.bounding.width, self.bounding.height], 2)
+        else:
+            writer.writeIntList([self.bounding.x, self.bounding.y, self.bounding.width, self.bounding.height], 1)
+        return writer.data
 
 class Exit():
     def __init__(self):
@@ -41,6 +51,7 @@ class Exit():
         self.idImage    = 0
         self.idSound    = 0
         
+        # TODO - Abstract!
         self.modeDecoding   = 0
         self.spawnData      = 0
     
@@ -69,6 +80,23 @@ class Exit():
         output.posTransition = (reader.readUInt(sizePosition), reader.readUInt(sizePosition))
         output.spawnData = reader.readU16()
         return output
+
+    def toBytes(self, isHd : bool = False) -> bytes:
+        if isHd:
+            sizePosition = 2
+        else:
+            sizePosition = 1
+
+        writer = BinaryWriter()
+        writer.writeIntList([self.bounding.x, self.bounding.y, self.bounding.width, self.bounding.height], sizePosition)
+        writer.writeInt(self.idImage, 1)
+        writer.writeInt(self.modeDecoding,1)
+        writer.pad(1)
+        writer.writeInt(self.idSound, 1)
+        writer.writeInt(self.posTransition[0], sizePosition)
+        writer.writeInt(self.posTransition[1], sizePosition)
+        writer.writeU16(self.spawnData)
+        return writer.data
 
     def canSpawnEvent(self):
         return self.modeDecoding >= 2
@@ -105,6 +133,16 @@ class TObjEntry():
         output.idChar = reader.readU16()
         output.idTObj = reader.readU32()
         return output
+    
+    def toBytes(self, isHd : bool = False) -> bytes:
+        writer = BinaryWriter()
+        if isHd:
+            writer.writeIntList([self.bounding.x, self.bounding.y, self.bounding.width, self.bounding.height], 2)
+        else:
+            writer.writeIntList([self.bounding.x, self.bounding.y, self.bounding.width, self.bounding.height], 1)
+        writer.writeU16(self.idChar)
+        writer.writeU32(self.idTObj)
+        return writer.data
 
 class BgAni():
     def __init__(self):
@@ -121,15 +159,26 @@ class BgAni():
     @staticmethod
     def fromBytes(data, isHd : bool = False):
         if isHd:
-            sizePosition = 34
+            sizePosition = 2
         else:
-            sizePosition = 32
+            sizePosition = 1
 
         reader = BinaryReader(data=data)
         output = BgAni()
         output.pos = (reader.readUInt(sizePosition), reader.readUInt(sizePosition))
         output.name = reader.readPaddedString(30, ENCODING_DEFAULT_STRING)
         return output
+
+    def toBytes(self, isHd : bool = False) -> bytes:
+        writer = BinaryWriter()
+        if isHd:
+            sizePosition = 2
+        else:
+            sizePosition = 1
+        writer.writeInt(self.pos[0], sizePosition)
+        writer.writeInt(self.pos[1], sizePosition)
+        writer.writePaddedString(self.name, 30, ENCODING_DEFAULT_STRING)
+        return writer.data
 
 class EventEntry():
     def __init__(self):
@@ -158,6 +207,18 @@ class EventEntry():
         output.idEvent = reader.readU16()
         return output
 
+    def toBytes(self, isHd : bool = False) -> bytes:
+        if isHd:
+            sizePosition = 2
+        else:
+            sizePosition = 1
+        writer = BinaryWriter()
+
+        writer.writeIntList([self.bounding.x, self.bounding.y, self.bounding.width, self.bounding.height], sizePosition)
+        writer.writeU16(self.idImage)
+        writer.writeU16(self.idEvent)
+        return writer.data
+
 class PlaceData(File):
     # Used to access room data, which includes animation positions, room connections and event objects.
     
@@ -175,48 +236,51 @@ class PlaceData(File):
         self._objText        = []
         self._objHints       = []
         self._exits          = []
+
+        # TODO - Research music more, this is referenced against snd_fix to get the BG music ID
+        self.idSound : int   = 0
     
-    def getCountObjEvents(self):
+    def getCountObjEvents(self) -> int:
         return len(self._objEvents)
     
-    def getObjEvent(self, indexObj):
+    def getObjEvent(self, indexObj : int) -> Optional[EventEntry]:
         if 0 <= indexObj < self.getCountObjEvents():
             return self._objEvents[indexObj]
         return None
     
-    def getCountObjBgEvent(self):
+    def getCountObjBgEvent(self) -> int:
         return len(self._objBgAni)
     
-    def getObjBgEvent(self, indexObj):
+    def getObjBgEvent(self, indexObj : int) -> Optional[BgAni]:
         if 0 <= indexObj < self.getCountObjBgEvent():
             return self._objBgAni[indexObj]
         return None
     
-    def getCountObjText(self):
+    def getCountObjText(self) -> int:
         return len(self._objText)
     
-    def getObjText(self, indexObj):
+    def getObjText(self, indexObj : int) -> Optional[TObjEntry]:
         if 0 <= indexObj < self.getCountObjText():
             return self._objText[indexObj]
         return None
     
-    def getCountHintCoin(self):
+    def getCountHintCoin(self) -> int:
         return len(self._objHints)
 
-    def getObjHintCoin(self, indexObj):
+    def getObjHintCoin(self, indexObj : int) -> Optional[HintCoin]:
         if 0 <= indexObj < self.getCountHintCoin():
             return self._objHints[indexObj]
         return None
     
-    def getCountExits(self):
+    def getCountExits(self) -> int:
         return len(self._exits)
 
-    def getExit(self, indexExit):
+    def getExit(self, indexExit : int) -> Optional[Exit]:
         if 0 <= indexExit < self.getCountExits():
             return self._exits[indexExit]
         return None
-    
-    def _load(self, data, isHd : bool = False):
+
+    def _load(self, data : bytes, isHd : bool = False):
         reader = BinaryReader(data=data)
         self.idNamePlace = reader.readUInt(1)
         reader.seek(24)
@@ -263,23 +327,90 @@ class PlaceData(File):
                 self._exits.pop()
                 reader.seek(reader.tell() + (Exit.getLength(isHd) * (11 - exitIndex)))
                 break
+        
+        # TODO - Is this signed?
+        if isHd:
+            self.idSound = reader.readU32()
+        else:
+            self.idSound = reader.readU16()
 
-    def _loadHd(self, data):
+    def _loadHd(self, data : bytes):
         self._load(data, True)
     
-    def _loadNds(self, data):
+    def _loadNds(self, data : bytes):
         self._load(data, False)
+    
+    def _save(self, isHd : bool = False):
+        writer = BinaryWriter()
+        writer.writeInt(self.idNamePlace, 1)
+        writer.pad(23)
+        if isHd:
+            writer.writeU16(self.posMap[0])
+            writer.writeU16(self.posMap[1])
+        else:
+            writer.writeInt(self.posMap[0], 1)
+            writer.writeInt(self.posMap[1], 1)
+        
+        writer.writeInt(self.bgMainId, 1)
+        writer.writeInt(self.bgMapId, 1)
 
+        for indexHintCoin in range(4):
+            if (objHintCoin := self.getObjHintCoin(indexHintCoin)) != None:
+                writer.write(objHintCoin.toBytes(isHd))
+            else:
+                writer.pad(HintCoin.getLength(isHd))
+            
+        for indexTObj in range(16):
+            if (objText := self.getObjText(indexTObj)) != None:
+                writer.write(objText.toBytes(isHd))
+            else:
+                writer.pad(TObjEntry.getLength(isHd))
+        
+        for indexBgAni in range(12):
+            if (objBgAni := self.getObjBgEvent(indexBgAni)) != None:
+                writer.write(objBgAni.toBytes(isHd))
+            else:
+                writer.pad(BgAni.getLength(isHd))
+        
+        for indexEvent in range(16):
+            if (objEvent := self.getObjEvent(indexEvent)) != None:
+                writer.write(objEvent.toBytes(isHd))
+            else:
+                writer.pad(EventEntry.getLength(isHd))
+
+        for indexExit in range(12):
+            if (objExit := self.getExit(indexExit)) != None:
+                writer.write(objExit.toBytes(isHd))
+            else:
+                writer.pad(Exit.getLength(isHd))
+        
+        if isHd:
+            writer.writeU32(self.idSound)
+        else:
+            writer.writeU16(self.idSound)
+
+    def _saveHd(self):
+        self._save(True)
+
+    def _saveNds(self):
+        self._save(False)
+    
 class PlaceDataNds(PlaceData):
     def __init__(self):
         super().__init__()
 
-    def load(self, data):
+    def load(self, data : bytes):
         self._loadNds(data)
+    
+    def save(self, data : bytes):
+        self._saveNds()
 
 class PlaceDataHd(PlaceData):
     def __init__(self):
         super().__init__()
     
-    def load(self, data):
+    def load(self, data : bytes):
         self._loadHd(data)
+    
+    def save(self, data : bytes):
+        self._saveHd()

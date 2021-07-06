@@ -1,5 +1,6 @@
-from typing import Optional
-from . import binary
+from __future__ import annotations
+from typing import List, Optional
+from .binary import BinaryReader, BinaryWriter
 from .asset import File
 from .const import ENCODING_DEFAULT_STRING
 from math import ceil
@@ -23,13 +24,13 @@ def calculateSaveChecksumFromBuffer(buffer, saveDataOffset, length):
 
     return (smallTotal >> 16) + (smallTotal & 0xffff) | ((largeTotal >> 16) + (largeTotal & 0xffff)) * 0x10000
 
-def calculateSaveChecksumFromData(data):
+def calculateSaveChecksumFromData(data) -> int:
     return calculateSaveChecksumFromBuffer(data, 0, len(data))
 
 def fixChecksums(data):
-    reader = binary.BinaryReader(data=data)
-    output = binary.BinaryWriter()
-    temp = binary.BinaryWriter()
+    reader = BinaryReader(data=data)
+    output = BinaryWriter()
+    temp = BinaryWriter()
 
     output.write(reader.read(16))
     reader.seek(4,1)
@@ -39,13 +40,156 @@ def fixChecksums(data):
     output.write(reader.read(56))
     for _slot in range(3):
         reader.seek(4,1)
-        temp = binary.BinaryWriter()
+        temp = BinaryWriter()
         temp.write(reader.read(796))
         output.writeU32(calculateSaveChecksumFromData(temp.data))
         output.write(temp.data)
         output.write(reader.read(80))
     output.write(reader.read(8192 - reader.tell()))
     return output.data
+
+class WiFiData():
+    def __init__(self, idInternal : int, twoDigitYear : Optional[int], month : Optional[int], day : Optional[int]):
+        self.idInternal = idInternal
+        self.__year = 0
+        self.__month = 1
+        self.__day = 1
+
+        if type(twoDigitYear) == int:
+            self.setYear(twoDigitYear)
+        if type(month) == int:
+            self.setMonth(month)
+        if type(day) == int:
+            self.setDay(day)
+    
+    def __validateInt(self, entry : int, minBounds : int, maxBounds : int) -> bool:
+        if type(entry) == int and type(minBounds) == int and type(maxBounds) == int:
+            return min(minBounds, maxBounds) <= entry <= max(minBounds, maxBounds)
+        return False
+    
+    def setYear(self, year : int) -> bool:
+        if self.__validateInt(year, 0, 99):
+            self.__year = year
+            return True
+        return False
+    
+    def setMonth(self, month : int) -> bool:
+        """Set the month for this puzzle entry.
+
+        Args:
+            month (int): January is month 1
+
+        Returns:
+            bool: True if month was valid
+        """
+        if self.__validateInt(month, 1, 12):
+            self.__month = month
+            return True
+        return False
+    
+    def setDay(self, day : int) -> bool:
+        """Set the day for this puzzle entry.
+
+        Args:
+            day (int): Day 1 is the first of the month
+
+        Returns:
+            bool: True if day was valid
+        """
+        if self.__validateInt(day, 1, 31):
+            self.__day = day
+            return True
+        return False
+
+    def getYear(self) -> int:
+        return self.__year
+    
+    def getMonth(self) -> int:
+        return self.__month
+
+    def getDay(self) -> int:
+        return self.__day
+
+class WiFiState():
+
+    MAX_COUNT_PUZZLE = 33
+
+    def __init__(self):
+        self.__entries : List[WiFiData] = []
+        self.tampered = False
+    
+    @staticmethod
+    def fromBytes(data : bytes) -> WiFiState:
+        output = WiFiState()
+        reader = BinaryReader(data=data)
+        checksum = reader.readU32()
+
+        if checksum == 0xffffffff:
+            return output
+
+        data = reader.read(140)
+        if checksum == calculateSaveChecksumFromData(data):
+            output.tampered = False
+        else:
+            output.tampered = True
+        
+        reader.seek(4)
+        countEntries = reader.readU32()
+        reader.seek(4,1)
+
+        for indexEntry in range(min(countEntries, WiFiState.MAX_COUNT_PUZZLE)):
+            output.addEntry(WiFiData(reader.readUInt(1), reader.readUInt(1), reader.readUInt(1), reader.readUInt(1)))
+
+        return output
+    
+    def toBytes(self) -> bytes:
+        output = BinaryWriter()
+
+        if self.getCountEntries() == 0:
+            output.pad(144, b'\xff')
+            return output.data
+
+        output.writeU32(self.getCountEntries())
+        output.writeU32(self.getCountEntries())
+        
+        for entry in self.__entries:
+            output.writeInt(entry.idInternal, 1)
+            output.writeInt(entry.getYear(), 1)
+            output.writeInt(entry.getMonth(), 1)
+            output.writeInt(entry.getDay(), 1)
+
+        output.align(140)
+        return calculateSaveChecksumFromData(output.data).to_bytes(4, byteorder='little') + output.data
+    
+    def getCountEntries(self) -> int:
+        return len(self.__entries)
+    
+    def getEntry(self, indexEntry : int) -> Optional[WiFiData]:
+        if type(indexEntry) == int and 0 <= indexEntry < self.getCountEntries():
+            return self.__entries[indexEntry]
+        return None
+    
+    def popEntry(self, indexEntry : int) -> Optional[WiFiData]:
+        if (entry := self.getEntry(indexEntry)) != None:
+            return self.__entries.pop(indexEntry)
+        return None
+    
+    def removeEntry(self, indexEntry : int) -> bool:
+        if self.popEntry(indexEntry) != None:
+            return True
+        return False
+    
+    def addEntry(self, entry : WiFiData) -> bool:
+        if type(entry) == WiFiData and self.getCountEntries() < WiFiState.MAX_COUNT_PUZZLE:
+            self.__entries.append(entry)
+            return True
+        return False
+    
+    def insertEntry(self, entry : WiFiData, index : int) -> bool:
+        if type(entry) == WiFiData and type(index) == int and self.getCountEntries() < WiFiState.MAX_COUNT_PUZZLE:
+            self.__entries.insert(index, entry)
+            return True
+        return False
 
 class PuzzleData():
     def __init__(self):
@@ -522,7 +666,7 @@ class Layton2SaveSlot():
         self = Layton2SaveSlot()
 
     def fromBytes(self, data):
-        reader = binary.BinaryReader(data = data)
+        reader = BinaryReader(data = data)
         self.isTampered = self.isTampered or (reader.readUInt(4) != calculateSaveChecksumFromData(reader.read(796)))
 
         reader.seek(4)
@@ -591,9 +735,9 @@ class Layton2SaveSlot():
         # 80 bytes remaining is padding to pad the save to 880 bytes
     
     def toBytes(self):
-        writer = binary.BinaryWriter()
+        writer = BinaryWriter()
         if self.isActive:
-            data = binary.BinaryWriter()
+            data = BinaryWriter()
 
             data.write(self.eventViewed.toBytes(outLength=128))
             data.write(self.storyFlag.toBytes(outLength=16))
@@ -702,7 +846,18 @@ class Layton2SaveFile(File):
         self._slots = [Layton2SaveSlot(),
                        Layton2SaveSlot(),
                        Layton2SaveSlot()]
+
+        self._wiFiData = WiFiState()
     
+    def getWiFiData(self) -> WiFiState:
+        return self._wiFiData
+    
+    def setWiFiData(self, wiFiData : WiFiState) -> bool:
+        if type(wiFiData) == WiFiState:
+            self._wiFiData = wiFiData
+            return True
+        return False
+
     def getSlotData(self, slot):
         return self._slots[slot]
     
@@ -714,7 +869,7 @@ class Layton2SaveFile(File):
         return False
 
     def load(self, data):
-        reader = binary.BinaryReader(data=data)
+        reader = BinaryReader(data=data)
         if reader.readPaddedString(16, ENCODING_DEFAULT_STRING) == "ATAMFIREBELLNY":
             isTampered = reader.readU32() != calculateSaveChecksumFromData(reader.read(196))
             reader.seek(20)
@@ -745,12 +900,13 @@ class Layton2SaveFile(File):
                     self.getSlotData(slotId).fromBytes(reader.read(880))
                 else:
                     reader.seek(880,1)
-        
+
+            self._wiFiData = WiFiState.fromBytes(reader.read(144))
             return True
         return False
 
     def save(self):
-        writer = binary.BinaryWriter()
+        writer = BinaryWriter()
         writer.writePaddedString("ATAMFIREBELLNY", 16, 'ascii')
 
         isSaveActive =  (self._slots[0].isActive +
@@ -758,7 +914,7 @@ class Layton2SaveFile(File):
                         (self._slots[2].isActive << 2))
 
         if isSaveActive != 0:
-            header = binary.BinaryWriter()
+            header = BinaryWriter()
             header.writeInt(isSaveActive, 4)
             for saveSlot in self._slots:
                 header.writePaddedString(saveSlot.name, 20, ENCODING_DEFAULT_STRING)
@@ -783,6 +939,8 @@ class Layton2SaveFile(File):
 
             for saveSlot in self._slots:
                 writer.write(saveSlot.toBytes())
+            
+            writer.write(self.getWiFiData().toBytes())
         else:
             writer.pad(4, padChar=b'\xff')
             writer.pad(196, padChar=b'\x00')

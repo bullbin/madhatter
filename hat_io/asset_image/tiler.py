@@ -252,7 +252,7 @@ class TiledImageHandler():
         logPrint("Palette set to", len(self.paletteRgbTriplets))
 
     # TODO - Improve tile support for arj and rewrite to force typing (make more resilient)
-
+    # TODO - Multithread decoding for speedup especially on backgrounds
     def addTileFromReader(self, reader, prolongDecoding=False, useArjDecoding=False, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET, overrideBpp=-1):
         if overrideBpp != -1:
             bpp = overrideBpp

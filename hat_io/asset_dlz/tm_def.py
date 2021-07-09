@@ -2,6 +2,7 @@
 # Stores framecounts for certain special animations.
 # Can be called for wait periods in scripts.
 
+from typing import Optional
 from ..binary import BinaryReader, BinaryWriter
 from .generic_dlz import DlzEntryNull, DlzData
 
@@ -29,26 +30,17 @@ class DlzEntryTimeDefinition(DlzEntryNull):
 
 class TimeDefinitionInfo(DlzData):
     def __init__(self):
-        # TODO - Rewrite some dlzs to store data in a dictionary, as each index can only map to one entry
         DlzData.__init__(self)
+        self._entryType = DlzEntryTimeDefinition
         self._internalLookup = {}
 
-    def addEntryFromData(self, data):
-        tempEntry = DlzEntryTimeDefinition.fromBytes(data)
-        if type(tempEntry) != DlzEntryNull:
-            self._internalLookup[tempEntry.idTime] = self.getCountEntries()
-            self.addEntry(tempEntry)
+    def _addEntryToDb(self, entry: DlzEntryTimeDefinition):
+        self._internalLookup[entry.idTime] = entry
     
-    def removeEntry(self, indexEntry):
-        if 0 <= indexEntry < self.getCountEntries():
-            for key in self._internalLookup:
-                if self._internalLookup[key] > indexEntry:
-                    self._internalLookup[key] = self._internalLookup[key] - 1
-            del self._internalLookup[key]
-            return super().removeEntry(indexEntry)
-        return False
+    def _removeEntryFromDb(self, entry: DlzEntryTimeDefinition):
+        del self._internalLookup[entry.idTime]
 
-    def searchForEntry(self, idTime):
+    def searchForEntry(self, idTime : int) -> Optional[DlzEntryTimeDefinition]:
         if idTime in self._internalLookup:
             return self._internalLookup[idTime]
         return None

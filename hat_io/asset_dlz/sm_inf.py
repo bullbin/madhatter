@@ -87,16 +87,9 @@ class SubmapInfo(DlzData):
 class SubmapInfoNds(SubmapInfo):
     def __init__(self):
         super().__init__()
-       
-    def addEntryFromData(self, data : bytes):
-        # TODO - Use this expression for all dlz files to eliminate null entry
-        if type(submapEntry := DlzEntrySubmapInfoNds.fromBytes(data)) == DlzEntrySubmapInfoNds:
-            self.addEntry(submapEntry)
+        self._entryType = DlzEntrySubmapInfoNds
 
 class SubmapInfoHd(SubmapInfo):
     def __init__(self):
         super().__init__()
-       
-    def addEntryFromData(self, data : bytes):
-        if type(submapEntry := DlzEntrySubmapInfoHd.fromBytes(data)) == DlzEntrySubmapInfoHd:
-            self.addEntry(submapEntry)
+        self._entryType = DlzEntrySubmapInfoHd

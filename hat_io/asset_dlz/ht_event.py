@@ -30,9 +30,7 @@ class DlzEntryHerbteaEvent(DlzEntryNull):
 class HerbteaEvent(DlzData):
     def __init__(self):
         DlzData.__init__(self)
-    
-    def addEntryFromData(self, data):
-        self.addEntry(DlzEntryHerbteaEvent.fromBytes(data))
+        self._entryType = DlzEntryHerbteaEvent
     
     def searchForEntry(self, idEvent : int) -> Optional[DlzEntryHerbteaEvent]:
         for indexEntry in range(self.getCountEntries()):

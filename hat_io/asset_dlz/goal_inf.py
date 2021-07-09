@@ -2,6 +2,7 @@
 # Seems to be used to trigger goal updates after events
 # Some unknown information remaining here, since could not be found through reversing
 
+from typing import Optional
 from ..binary import BinaryReader, BinaryWriter
 from .generic_dlz import DlzEntryNull, DlzData
 
@@ -36,6 +37,16 @@ class DlzEntryGoalInfo(DlzEntryNull):
 class GoalInfo(DlzData):
     def __init__(self):
         DlzData.__init__(self)
+        self._entryType = DlzEntryGoalInfo
+        self._entryLookup = {}
     
-    def addEntryFromData(self, data):
-        self.addEntry(DlzEntryGoalInfo.fromBytes(data))
+    def _addEntryToDb(self, entry: DlzEntryGoalInfo):
+        self._entryLookup[entry.idEvent] = entry
+
+    def _removeEntryFromDb(self, entry: DlzEntryGoalInfo):
+        del self._entryLookup[entry.idEvent]
+    
+    def searchForEntry(self, idEvent : int) -> Optional[DlzEntryGoalInfo]:
+        if idEvent in self._entryLookup:
+            return self._entryLookup[idEvent]
+        return None

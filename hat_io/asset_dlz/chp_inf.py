@@ -33,6 +33,4 @@ class DlzEntryChapterInfo(DlzEntryNull):
 class ChapterInfo(DlzData):
     def __init__(self):
         DlzData.__init__(self)
-    
-    def addEntryFromData(self, data):
-        self.addEntry(DlzEntryChapterInfo.fromBytes(data))
+        self._entryType = DlzEntryChapterInfo

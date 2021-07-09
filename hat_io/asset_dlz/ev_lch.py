@@ -58,29 +58,27 @@ class EventDescriptorBank(DlzData):
     def __init__(self):
         DlzData.__init__(self)
     
+    # TODO - Lookup table
     def _searchForEntry(self, idEvent : int) -> Optional[Type[DlzEntryEventDescriptorBank]]:
         for indexEntry in range(self.getCountEntries()):
-            if isinstance(self.getEntry(indexEntry), DlzEntryEventDescriptorBank):
-                return self.getEntry(indexEntry)
+            entry = self.getEntry(indexEntry)
+            if isinstance(entry, DlzEntryEventDescriptorBank) and entry.idEvent == idEvent:
+                return entry
         return None
 
 # TODO - Conversion
 class EventDescriptorBankNds(EventDescriptorBank):
     def __init__(self):
-        super().___init__()
-
-    def addEntryFromData(self, data : bytes):
-        self.addEntry(DlzEntryEventDescriptorBankNds.fromBytes(data))
+        super().__init__()
+        self._entryType = DlzEntryEventDescriptorBankNds
     
     def searchForEntry(self, idEvent : int) -> Optional[DlzEntryEventDescriptorBankNds]:
         return super()._searchForEntry(idEvent)
 
 class EventDescriptorBankHd(EventDescriptorBank):
     def __init__(self):
-        super().___init__()
-
-    def addEntryFromData(self, data : bytes):
-        self.addEntry(DlzEntryEventDescriptorBankHd.fromBytes(data))
+        super().__init__()
+        self._entryType = DlzEntryEventDescriptorBankHd
     
     def searchForEntry(self, idEvent : int) -> Optional[DlzEntryEventDescriptorBankHd]:
         return super()._searchForEntry(idEvent)

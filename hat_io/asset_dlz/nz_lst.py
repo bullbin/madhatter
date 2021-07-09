@@ -3,7 +3,7 @@
 # The in-game puzzle list will retain the order of this file.
 
 from __future__ import annotations
-from typing import Optional, Union
+from typing import Optional, Type, Union
 from ..binary import BinaryReader, BinaryWriter
 from .generic_dlz import DlzEntryNull, DlzData
 from ..const import ENCODING_DEFAULT_STRING
@@ -65,17 +65,14 @@ class NazoList(DlzData):
     def __init__(self):
         DlzData.__init__(self)
         self._internalLookup = {}
-    
-    def removeEntry(self, indexEntry : int) -> bool:
-        if 0 <= indexEntry < self.getCountEntries():
-            for key in self._internalLookup:
-                if self._internalLookup[key] > indexEntry:
-                    self._internalLookup[key] = self._internalLookup[key] - 1
-            del self._internalLookup[key]
-            return super().removeEntry(indexEntry)
-        return False
 
-    def searchForEntry(self, idInteral : int) -> Optional[int]:
+    def _addEntryToDb(self, entry: Type[DlzEntryNzLst]):
+        self._internalLookup[entry.idInternal] = entry
+    
+    def _removeEntryFromDb(self, entry: Type[DlzEntryNzLst]):
+        del self._internalLookup[entry.idInternal]
+
+    def searchForEntry(self, idInteral : int) -> Optional[Type[DlzEntryNzLst]]:
         if idInteral in self._internalLookup:
             return self._internalLookup[idInteral]
         return None
@@ -83,19 +80,9 @@ class NazoList(DlzData):
 class NazoListNds(NazoList):
     def __init__(self):
         super().__init__()
-
-    def addEntryFromData(self, data : bytes):
-        tempEntry = DlzEntryNzLstNds.fromBytes(data)
-        if type(tempEntry) == DlzEntryNzLstNds:
-            self._internalLookup[tempEntry.idInternal] = self.getCountEntries()
-            self.addEntry(tempEntry)
+        self._entryType = DlzEntryNzLstNds
 
 class NazoListHd(NazoList):
     def __init__(self):
         super().__init__()
-
-    def addEntryFromData(self, data : bytes):
-        tempEntry = DlzEntryNzLstHd.fromBytes(data)
-        if type(tempEntry) == DlzEntryNzLstHd:
-            self._internalLookup[tempEntry.idInternal] = self.getCountEntries()
-            self.addEntry(tempEntry)
+        self._entryType = DlzEntryNzLstHd

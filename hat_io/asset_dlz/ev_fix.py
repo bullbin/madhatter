@@ -1,3 +1,4 @@
+from typing import Optional
 from ..binary import BinaryReader, BinaryWriter
 from .generic_dlz import DlzEntryNull, DlzData
 
@@ -35,24 +36,16 @@ class DlzEntryEvFix(DlzEntryNull):
 class EventBaseList(DlzData):
     def __init__(self):
         DlzData.__init__(self)
+        self._entryType = DlzEntryEvFix
         self._eventLookup = {}
     
-    def addEntryFromData(self, data):
-        tempEvent = DlzEntryEvFix.fromBytes(data)
-        if type(tempEvent) != DlzEntryNull:
-            self._eventLookup[tempEvent.idEvent] = self.getCountEntries()
-            self.addEntry(tempEvent)
-    
-    def removeEntry(self, indexEntry):
-        if 0 <= indexEntry < self.getCountEntries():
-            for key in self._eventLookup:
-                if self._eventLookup[key] > indexEntry:
-                    self._eventLookup[key] = self._eventLookup[key] - 1
-            del self._eventLookup[key]
-            return super().removeEntry(indexEntry)
-        return False
+    def _addEntryToDb(self, entry: DlzEntryEvFix):
+        self._eventLookup[entry.idEvent] = entry
 
-    def searchForEntry(self, idEvent):
+    def _removeEntryFromDb(self, entry: DlzEntryEvFix):
+        del self._eventLookup[entry.idEvent]
+
+    def searchForEntry(self, idEvent : int) -> Optional[DlzEntryEvFix]:
         if idEvent in self._eventLookup:
             return self._eventLookup[idEvent]
         return None

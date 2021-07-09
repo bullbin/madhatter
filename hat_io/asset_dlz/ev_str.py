@@ -3,8 +3,9 @@
 # Though there is a limit to the amount of data each entry can store, the update function is recursive so
 # entries can be chained together during an update.
 
+from typing import Optional
 from .generic_dlz import DlzEntryNull, DlzData
-from ..binary import BinaryReader, BinaryWriter
+from ..binary import BinaryReader
 
 # TODO - Only here to test loading support. Needs rewrite to better support
 # Switch recursive test to keys so objects can be faster loaded.
@@ -82,25 +83,21 @@ class DlzEntryStorySelectList(DlzEntryNull):
             return output
         return DlzEntryNull()
     
-    def toBytes(self):
-        writer = BinaryWriter()
-        writer.writeU16(self.idEvent)
-        writer.writeU16(self.type)
-        writer.writeU16(self.goal)
-        return writer.data
+    # TODO - Write method
 
 class StorySelectList(DlzData):
     def __init__(self):
         DlzData.__init__(self)
+        self._entryType = DlzEntryStorySelectList
         self._entryLookup = {}
+
+    def _addEntryToDb(self, entry: DlzEntryStorySelectList):
+        self._entryLookup[entry.idEntry] = entry
     
-    def addEntryFromData(self, data):
-        tempEvent = DlzEntryStorySelectList.fromBytes(data)
-        if type(tempEvent) == DlzEntryStorySelectList:
-            self._entryLookup[tempEvent.idEntry] = self.getCountEntries()
-            self.addEntry(tempEvent)
-    
-    def searchForEntry(self, idEntry):
+    def _removeEntryFromDb(self, entry: DlzEntryStorySelectList):
+        del self._entryLookup[entry.idEntry]
+
+    def searchForEntry(self, idEntry : int) -> Optional[DlzEntryStorySelectList]:
         if idEntry in self._entryLookup:
             return self._entryLookup[idEntry]
         return None

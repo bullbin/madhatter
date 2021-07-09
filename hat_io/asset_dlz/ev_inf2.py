@@ -1,6 +1,7 @@
 # Event Information
 # Used to set event branching behaviour prior to executing an event
 
+from typing import Optional
 from ..binary import BinaryReader, BinaryWriter
 from .generic_dlz import DlzEntryNull, DlzData
 
@@ -52,24 +53,16 @@ class DlzEntryEvInf2(DlzEntryNull):
 class EventInfoList(DlzData):
     def __init__(self):
         DlzData.__init__(self)
+        self._entryType = DlzEntryEvInf2
         self._eventLookup = {}
-    
-    def addEntryFromData(self, data):
-        tempEvent = DlzEntryEvInf2.fromBytes(data)
-        if type(tempEvent) != DlzEntryNull:
-            self._eventLookup[tempEvent.idEvent] = self.getCountEntries()
-            self.addEntry(tempEvent)
-    
-    def removeEntry(self, indexEntry):
-        if 0 <= indexEntry < self.getCountEntries():
-            for key in self._eventLookup:
-                if self._eventLookup[key] > indexEntry:
-                    self._eventLookup[key] = self._eventLookup[key] - 1
-            del self._eventLookup[key]
-            return super().removeEntry(indexEntry)
-        return False
 
-    def searchForEntry(self, idEvent):
+    def _addEntryToDb(self, entry: DlzEntryEvInf2):
+        self._eventLookup[entry.idEvent] = entry
+    
+    def _removeEntryFromDb(self, entry: DlzEntryEvInf2):
+        del self._eventLookup[entry.idEvent]
+
+    def searchForEntry(self, idEvent : int) -> Optional[DlzEntryEvInf2]:
         if idEvent in self._eventLookup:
             return self._eventLookup[idEvent]
         return None

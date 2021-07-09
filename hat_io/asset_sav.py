@@ -652,9 +652,9 @@ class Layton2SaveSlot():
         self.partyFlag              = FlagsAsArray(8)
 
         self.anthonyDiaryState      = EnableNewFlagState(12)
-        self.lastMemoPage           = 0
-        self.lastAccessedPuzzle     = 0                         # TODO - Internal or external?
-        self.codeInputFlags         = FlagsAsArray(16)          # TODO - Unknown length
+        self.lastMemoPage           = 0                         # 0 if never accessed
+        self.lastAccessedPuzzle     = 0                         # External ID
+        self.codeInputFlags         = FlagsAsArray(16)
 
         self.idHeldAutoEvent        = -1
         self.idImmediateEvent       = -1

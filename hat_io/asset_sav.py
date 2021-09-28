@@ -417,6 +417,8 @@ class HandlerHamsterState():
         self.name = name
 
     def setLevel(self, level):
+        if level > 0:
+            self.isEnabled = True
         self.level = level
     
     def setLevelData(self, data):

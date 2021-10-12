@@ -1,6 +1,6 @@
 from enum import Enum
 
-ENCODING_DEFAULT_STRING     = 'utf-8'
+ENCODING_DEFAULT_STRING     = 'shift-jis'
 ENCODING_LAYTON_3_STRING    = 'cp932'
 
 DICT_BOOLEAN_TO_PYTHON = {"false"   :False,

@@ -64,6 +64,9 @@ class Script(File):
             self.commands.append(instruction)
             return True
         return False
+    
+    def cullUnreachableInstructions(self):
+        pass
 
     def __str__(self):
         output = ""
@@ -131,7 +134,39 @@ class GdScript(Script):
     def __init__(self):
         Script.__init__(self)
     
+    def cullUnreachableInstructions(self):
+        # TODO - Not optimal, doesn't evaluate branches. Just cleans breakpoint
+        isCurious = False
+        for instruction in self.commands:
+            for operand in instruction.operands:
+                operand : Operand
+                if operand.type == 6 or operand.type == 7:
+                    isCurious = True
+                    break
+            if isCurious:
+                break
+        
+        if not(isCurious):
+            idxInstruction = 0
+            hitBreakpoint = False
+            for instruction in self.commands:
+                idxInstruction += 1
+                for operand in instruction.operands:
+                    if operand.type == 0xc:
+                        hitBreakpoint = True
+                        break
+                if hitBreakpoint:
+                    break
+
+            if hitBreakpoint:
+                self.commands = self.commands[:idxInstruction]
+            
+        return super().cullUnreachableInstructions()
+
     def save(self, isTalkscript=False):
+        if not(isTalkscript):
+            self.cullUnreachableInstructions()
+
         scriptWriter = binary.BinaryWriter()
         # TODO - Validation, since command length is known for LAYTON1 and LAYTON2
         for indexCommand in range(self.getInstructionCount()):
@@ -150,6 +185,10 @@ class GdScript(Script):
                     scriptWriter.writeU16(operand.value)
                 else:
                     pass
+
+        # 0xc triggers early termination for script. Inhouse tools add this at end for extra security
+        #     but it's otherwise redundant, length is checked anyways.
+        # TODO - Collapse repeated breakpoints (have to check for LAYTON2 behaviour)
         scriptWriter.write(b'\x0c\x00')
         self.data = len(scriptWriter.data).to_bytes(4, byteorder = 'little') + scriptWriter.data
 
@@ -180,10 +219,19 @@ class GdScript(Script):
                 command.operands.append(Operand(lastType, reader.readPaddedString(reader.readU16(), ENCODING_DEFAULT_STRING)))
             elif lastType == 4: # Flags
                 command.operands.append(Operand(lastType, reader.read(reader.readU16())))
-            elif lastType in [5,8,9,10,11,12]:  # Skip
+            elif lastType in [5,8,9,10,11]:  # Skip
                 pass
+            elif lastType == 0xc: # Breakpoint, we diverge from reversing here (HACK)
+                command.operands.append(Operand(lastType, None))
             elif lastType in [6,7]: # Offset
                 command.operands.append(Operand(lastType, reader.readS32()))
 
         if command != None: # Bugfix where last command missing
             self.commands.append(command)
+        
+        if not(isTalkscript):
+            # TODO - Further research into instruction culling
+            # Happens during runtime - once we hit an 0xc operand type,
+            #     we end script execution.
+            # Behaviour not understood for LAYTON1 with branching.
+            self.cullUnreachableInstructions()

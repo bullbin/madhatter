@@ -1,3 +1,6 @@
+from typing import Optional
+
+from widebrim.madhatter.hat_io.asset_image.colour import eightToFive, fiveToEight
 from ..binary import BinaryWriter
 from ...common import log as logPrint
 from PIL import Image
@@ -7,6 +10,8 @@ from math import ceil, log
 # TODO - Give method to TiledImage which iterates through every pixel of image,
 #        and eliminates any unused colours from the palette.
 #        Should be useful once alpha has been applied to cleanup excess pixels.
+
+# TODO - Paletted non-Layton images will literally break everything
 
 def alignToFitTile(image):
     width, height = image.size
@@ -20,11 +25,7 @@ def alignToFitTile(image):
         output.paste(0, (0, 0, width, height))
         output.paste(image)
     else:
-        if image.mode == "RGBA":
-            output = Image.new("RGBA", (width, height))
-        else:
-            output = Image.new("RGB", (width, height))
-
+        output = Image.new("RGBA", (width, height))
         output.paste((0,0,0,0), (0, 0, width, height))
 
         if image.mode == "RGBA":
@@ -51,6 +52,11 @@ def purgePaletteList(palette):
             break
 
     return list(palette[0:endIndex * 3])
+
+def getMaxPaletteValue(image) -> Optional[int]:
+    if image.mode == "P":
+        return image.getextrema()[1]
+    return None
 
 def getPaletteFromImages(images):
     # There is a limit in PIL but hopefully this will never be reached
@@ -227,6 +233,18 @@ class TiledImageHandler():
     def setTileMap(self, tileMap):
         self.tileMap = tileMap
 
+    def extractPaletteFromImage(self, image : Image) -> bool:
+        if image.mode != "P":
+            return False
+        
+        self.paletteRgbTriplets = []
+        countColors = getMaxPaletteValue(image) + 1
+        palette = image.getpalette()
+        for indexColor in range(countColors):
+            indexColor *= 3
+            self.paletteRgbTriplets.append((palette[indexColor], palette[indexColor + 1], palette[indexColor + 2]))
+        return True
+
     def setPaletteFromList(self, palette, countColours=-1):
         # TODO : Get palette from any internal tiles to prevent too little/too many colours being added
         self.paletteRgbTriplets = []
@@ -296,11 +314,12 @@ class TiledImageHandler():
 
                 if tileSelectedIndex < (2 ** 10 - 1):
                     tileFocus = self.tiles[tileSelectedIndex % len(self.tiles)]
+                    tileImage = tileFocus.getImage()
                     if tileSelectedFlipX:
-                        tileFocus = tileFocus.transpose(method=Image.FLIP_LEFT_RIGHT)
+                        tileImage = tileImage.transpose(method=Image.FLIP_LEFT_RIGHT)
                     if tileSelectedFlipY:
-                        tileFocus = tileFocus.transpose(method=Image.FLIP_TOP_BOTTOM)
-                    output.paste(tileFocus.getImage(), (x * 8, y * 8))
+                        tileImage = tileImage.transpose(method=Image.FLIP_TOP_BOTTOM)
+                    output.paste(tileImage, (x * 8, y * 8))
         return output
     
     def imageToTiles(self, image, useOffset=False, usePalette=[]):
@@ -354,17 +373,39 @@ class TiledImageHandler():
             logPrint("\tQuantizing...")
             # TODO : Pick alpha colour based on whether it is not in the image
             if usePalette != []:
-                imagePadded = imagePadded.quantize(colors=(TiledImageHandler.MAX_COUNT_COLOURS - 1))
+                # assume palette is already 5 bit (bad)
+                imagePadded = imagePadded.quantize(palette=usePalette, dither=Image.FLOYDSTEINBERG)
             else:
-                imagePadded = imagePadded.quantize(palette=usePalette)
-            alphaPalette = TiledImageHandler.COLOUR_ALPHA + purgePaletteList(imagePadded.getpalette())
-            alphaPalette = alphaPalette[0:TiledImageHandler.MAX_COUNT_COLOURS * 3]
+                imagePaddedPalette = imagePadded.copy()
+
+                # Quantize in 5 bit space
+                width, height = imagePadded.size
+                for x in range(width):
+                    for y in range(height):
+                        r,g,b = imagePaddedPalette.getpixel((x,y))
+                        imagePaddedPalette.putpixel((x,y), (eightToFive(r), eightToFive(g), eightToFive(b)))  
+                imagePaddedPalette = imagePaddedPalette.quantize(colors=(TiledImageHandler.MAX_COUNT_COLOURS - 1))
+
+                # Scale palette back to 8 bit space so dither can be more perceptually accurate
+                palette = list(imagePaddedPalette.getpalette())
+                newPalette = []
+                for val in palette:
+                    newPalette.append(fiveToEight(val))
+                imagePaddedPalette.putpalette(newPalette)
+
+                # Finally dither (PIL doesn't dither on initial for some reason)
+                countColors = getMaxPaletteValue(imagePaddedPalette) + 1
+                imagePadded = imagePadded.quantize(countColors, palette=imagePaddedPalette, dither=Image.FLOYDSTEINBERG)
+            
+            countColors = getMaxPaletteValue(imagePadded) + 1
+            alphaPalette = TiledImageHandler.COLOUR_ALPHA + imagePadded.getpalette()[0:countColors * 3]
+            # TODO - Cull used palette (can be too long)
             imagePadded = imagePadded.point(lambda c: c + 1)
             imagePadded.putpalette(alphaPalette)
             for alphaPos in alphaFillPixels:
                 imagePadded.putpixel(alphaPos, 0)
         
-        self.setPaletteFromList(imagePadded.getpalette())
+        self.extractPaletteFromImage(imagePadded)
         
         if useOffset:
             logPrint("\tFilling with offset data...")

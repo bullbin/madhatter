@@ -237,6 +237,15 @@ class NazoData(File):
     
     def setLukeVoicelines(self, value : bool):
         self.__flagUseLukeVoiceLines = value
+    
+    def getPlaceIndex(self) -> int:
+        return self.indexPlace
+    
+    def setPlaceIndex(self, indexPlace : int) -> bool:
+        if 0 <= indexPlace < 256:
+            self.indexPlace = indexPlace
+            return True
+        return False
 
     # TODO - Abstract reward
     def getReward(self) -> Optional[Tuple[int, int]]:

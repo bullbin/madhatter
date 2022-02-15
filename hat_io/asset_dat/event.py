@@ -1,5 +1,7 @@
-from madhatter.hat_io.asset import File
-from madhatter.hat_io.binary import BinaryReader
+from ..asset import File
+from ..binary import BinaryReader
+
+# TODO - Getters and setters and output, plus replace the implementation in the room handler
 
 class EventData(File):
 

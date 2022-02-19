@@ -86,7 +86,7 @@ class DlzData(File):
     def getCountEntries(self) -> int:
         return len(self._entries)
 
-    def getEntry(self, indexEntry : int) -> int:
+    def getEntry(self, indexEntry : int) -> Optional[Type[DlzEntryNull]]:
         if 0 <= indexEntry < self.getCountEntries():
             return self._entries[indexEntry]
         return None

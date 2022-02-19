@@ -1,20 +1,22 @@
+from __future__ import annotations
+from typing import Any, List, Optional
 from . import binary
 from .const import ENCODING_DEFAULT_STRING, ENCODING_LAYTON_3_STRING
 from .asset import File
 # TODO - Use const enums for operand type
 
 class Operand():
-    def __init__(self, operandType, operandValue):
-        self.type = operandType
-        self.value = operandValue
+    def __init__(self, operandType : int, operandValue : Any):
+        self.type   : int   = operandType
+        self.value  : Any   = operandValue
 
     def __str__(self):
         return str(self.type) + "\t" + str(self.value)
 
 class Instruction():
     def __init__(self):
-        self.opcode = None
-        self.operands = []
+        self.opcode   : Optional[bytes] = None
+        self.operands : List[Operand]   = []
 
     def __str__(self):
         if self.opcode == None:
@@ -28,7 +30,7 @@ class Instruction():
 class FutureInstruction(Instruction):
     def __init__(self):
         Instruction.__init__(self)
-        self.countOperands = 0
+        self.countOperands      = 0
         self.indexOperandsStart = 0
     
     def setFromData(self, data):
@@ -38,7 +40,7 @@ class FutureInstruction(Instruction):
         self.indexOperandsStart = reader.readU32()
 
     @staticmethod
-    def fromData(data):
+    def fromData(data) -> FutureInstruction:
         out = FutureInstruction()
         out.setFromData(data)
         return out
@@ -46,22 +48,80 @@ class FutureInstruction(Instruction):
 class Script(File):
     def __init__(self):
         File.__init__(self)
-        self.commands = []
+        self.commands : List[Instruction] = []
     
-    def load(self, data):
-        pass
+    def load(self, data : bytes) -> bool:
+        """Parse binary file into this script object.
 
-    def getInstructionCount(self):
+        Args:
+            data (bytes): Binary script data.
+
+        Returns:
+            bool: True if loading commenced successfully.
+        """
+        return False
+
+    def getInstructionCount(self) -> int:
+        """Get the number of instructions contained within this script.
+
+        Returns:
+            int: Number of instructions.
+        """
         return len(self.commands)
     
-    def getInstruction(self, index):
+    def getInstruction(self, index : int) -> Optional[Instruction]:
+        """Get the instruction at a given index.
+
+        Args:
+            index (int): Instruction index.
+
+        Returns:
+            Optional[Instruction]: Instruction. None if index was not in range.
+        """
         if 0 <= index < self.getInstructionCount():
             return self.commands[index]
         return None
 
-    def addInstruction(self, instruction):
+    def addInstruction(self, instruction : Instruction) -> bool:
+        """Add instruction to end of this script.
+
+        Args:
+            instruction (Instruction): Instruction to append.
+
+        Returns:
+            bool: True if addition was successful.
+        """
         if instruction.opcode != None:
             self.commands.append(instruction)
+            return True
+        return False
+    
+    def insertInstruction(self, indexInstruction : int, instruction : Instruction) -> bool:
+        """_summary_
+
+        Args:
+            indexInstruction (int): _description_
+            instruction (Instruction): _description_
+
+        Returns:
+            bool: True if instruction was successfully inserted.
+        """
+        if 0 <= indexInstruction <= len(self.commands):
+            self.commands.insert(indexInstruction, instruction)
+            return True
+        return False
+    
+    def removeInstruction(self, indexInstruction : int) -> bool:
+        """Remove the instruction at a given index.
+
+        Args:
+            indexInstruction (int): Index of instruction, starting at 0.
+
+        Returns:
+            bool: True if instruction was successfully removed.
+        """
+        if 0 <= indexInstruction < len(self.commands):
+            self.commands.pop(indexInstruction)
             return True
         return False
     
@@ -222,7 +282,9 @@ class GdScript(Script):
             elif lastType in [5,8,9,10,11]:  # Skip
                 pass
             elif lastType == 0xc: # Breakpoint, we diverge from reversing here (HACK)
-                command.operands.append(Operand(lastType, None))
+                # HACK - Script can be zero-length, meant to terminate here so makes sense (11092)
+                if command != None:
+                    command.operands.append(Operand(lastType, None))
             elif lastType in [6,7]: # Offset
                 command.operands.append(Operand(lastType, reader.readS32()))
 

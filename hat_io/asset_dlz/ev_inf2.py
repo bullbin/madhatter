@@ -55,6 +55,9 @@ class EventInfoList(DlzData):
         DlzData.__init__(self)
         self._entryType = DlzEntryEvInf2
         self._eventLookup = {}
+    
+    def getEntry(self, indexEntry: int) -> Optional[DlzEntryEvInf2]:
+        return super().getEntry(indexEntry)
 
     def _addEntryToDb(self, entry: DlzEntryEvInf2):
         self._eventLookup[entry.idEvent] = entry

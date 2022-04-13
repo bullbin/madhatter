@@ -1,8 +1,8 @@
 import ndspy.lz10
 from functools import partial
-from os import remove, rename, makedirs
+from os import makedirs
 from . import binary
-from ..common import log, logSevere
+from ..common import logSevere
 from .const import ENCODING_DEFAULT_STRING
 
 class _HuffmanCompressionNode():

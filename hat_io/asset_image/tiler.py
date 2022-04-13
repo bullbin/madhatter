@@ -2,7 +2,7 @@ from typing import Optional
 
 from widebrim.madhatter.hat_io.asset_image.colour import eightToFive, fiveToEight
 from ..binary import BinaryWriter
-from ...common import log as logPrint
+from ...common import logVerbose
 from PIL import Image
 from PIL.ImageFilter import GaussianBlur
 from math import ceil, log
@@ -267,7 +267,7 @@ class TiledImageHandler():
                 self.paletteRgbTriplets.append(tempTriplet)
             # TODO - Remap list in case of duplicates
 
-        logPrint("Palette set to", len(self.paletteRgbTriplets))
+        logVerbose("Palette set to", len(self.paletteRgbTriplets))
 
     # TODO - Improve tile support for arj and rewrite to force typing (make more resilient)
     # TODO - Multithread decoding for speedup especially on backgrounds
@@ -344,17 +344,17 @@ class TiledImageHandler():
             return getDimensionSplits(dimension, maxDim=128)
 
         # TODO : Extend palette, change palette, etc
-        logPrint("Called to convert!")
-        logPrint("\tInput:", image.mode)
+        logVerbose("Called to convert!")
+        logVerbose("\tInput:", image.mode)
         imagePadded = alignToFitTile(image)
         width, height = imagePadded.size
-        logPrint("\tNew dimensions", width, "x", height)
+        logVerbose("\tNew dimensions", width, "x", height)
         if width > (2 ** 16 - 1) or height > (2 ** 16 - 1):
             return
         
         alphaFillPixels = []
         if imagePadded.mode == "RGBA":
-            logPrint("Fixing alpha...")
+            logVerbose("Fixing alpha...")
             # Get alpha pixels
             blurredImage = imagePadded.convert("RGB").filter(GaussianBlur(radius=4))
             compositedImage = Image.new("RGB", imagePadded.size)
@@ -370,7 +370,7 @@ class TiledImageHandler():
             imagePadded = compositedImage
 
         if imagePadded.mode != "P":
-            logPrint("\tQuantizing...")
+            logVerbose("\tQuantizing...")
             # TODO : Pick alpha colour based on whether it is not in the image
             if usePalette != []:
                 # assume palette is already 5 bit (bad)
@@ -408,7 +408,7 @@ class TiledImageHandler():
         self.extractPaletteFromImage(imagePadded)
         
         if useOffset:
-            logPrint("\tFilling with offset data...")
+            logVerbose("\tFilling with offset data...")
             tileHeights = getDimensionSplitsLayton2(height)
             tileWidths = getDimensionSplitsLayton2(width)
 
@@ -423,7 +423,7 @@ class TiledImageHandler():
                     x += tileX
                 y += tileY
         else:
-            logPrint("\tFilling tilemap layout...")
+            logVerbose("\tFilling tilemap layout...")
             tileIndex = 0
             # TODO : Verify length of tiles to not exceed selectable amount (not possible?)
             # TODO : Improve detection to find mirrored tiles too

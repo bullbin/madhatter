@@ -3,7 +3,7 @@ from PIL import Image
 from PIL.Image import Image as ImageType
 from .opcodes import *
 from .. import binary
-from ...common import log as logPrint
+from ...common import logVerbose
 from ..asset import LaytonPack2
 from ..asset_script import LaytonScript
 from math import log
@@ -145,8 +145,8 @@ class AnimatedImage():
 
         countSubImage = reader.readU16()
         givenBpp = 2 ** (reader.readU16() - 1)
-        logPrint("Frames", countSubImage)
-        logPrint("Bpp", givenBpp)
+        logVerbose("Frames", countSubImage)
+        logVerbose("Bpp", givenBpp)
 
         if isArj:
             countColours = reader.readU32()
@@ -155,10 +155,10 @@ class AnimatedImage():
         tempWorkingImageResolutions = []
 
         for indexImage in range(countSubImage):
-            logPrint("Add Image")
+            logVerbose("Add Image")
             resolution = (reader.readU16(), reader.readU16())
             countTiles = reader.readU32()
-            logPrint("\t", resolution, countTiles)
+            logVerbose("\t", resolution, countTiles)
             workingImage = TiledImageHandler()
             for _indexTile in range(countTiles):
                 # TODO - Are tiles written if empty?

@@ -1,5 +1,8 @@
 def log(*args, **kwargs):
     print(*args, **kwargs)
+
+def logVerbose(*args, **kwargs):
+    print(*args, **kwargs)
         
 def logSevere(*args, **kwargs):
     print(*args, **kwargs)

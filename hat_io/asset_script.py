@@ -18,6 +18,14 @@ class Instruction():
         self.opcode   : Optional[bytes] = None
         self.operands : List[Operand]   = []
 
+    # TODO - Make operands and opcode private (prevents weird modifications)
+    def getFilteredOperands(self):
+        output = []
+        for operand in self.operands:
+            if operand.type != 0xc:
+                output.append(operand)
+        return output
+
     def __str__(self):
         if self.opcode == None:
             return "NO-OP"
@@ -32,6 +40,9 @@ class FutureInstruction(Instruction):
         Instruction.__init__(self)
         self.countOperands      = 0
         self.indexOperandsStart = 0
+    
+    def getFilteredOperands(self):
+        return self.operands
     
     def setFromData(self, data):
         reader = binary.BinaryReader(data=data)
@@ -48,7 +59,7 @@ class FutureInstruction(Instruction):
 class Script(File):
     def __init__(self):
         File.__init__(self)
-        self.commands : List[Instruction] = []
+        self._commands : List[Instruction] = []
     
     def load(self, data : bytes) -> bool:
         """Parse binary file into this script object.
@@ -61,13 +72,23 @@ class Script(File):
         """
         return False
 
-    def getInstructionCount(self) -> int:
+    # TODO - Cache on load, abstract this to make this easier
+    # This is called a lot during a typical execution cycle (bad code...)
+    def getInstructionCount(self, filterBreakpoint : bool = True) -> int:
         """Get the number of instructions contained within this script.
 
         Returns:
             int: Number of instructions.
         """
-        return len(self.commands)
+        if filterBreakpoint:
+            countInstruction = 0
+            for instruction in self._commands:
+                countInstruction += 1
+                for operand in instruction.operands:
+                    if operand.type == 0xc:
+                        break
+            return countInstruction
+        return len(self._commands)
     
     def getInstruction(self, index : int) -> Optional[Instruction]:
         """Get the instruction at a given index.
@@ -79,7 +100,7 @@ class Script(File):
             Optional[Instruction]: Instruction. None if index was not in range.
         """
         if 0 <= index < self.getInstructionCount():
-            return self.commands[index]
+            return self._commands[index]
         return None
 
     def addInstruction(self, instruction : Instruction) -> bool:
@@ -92,7 +113,7 @@ class Script(File):
             bool: True if addition was successful.
         """
         if instruction.opcode != None:
-            self.commands.append(instruction)
+            self._commands.append(instruction)
             return True
         return False
     
@@ -106,8 +127,8 @@ class Script(File):
         Returns:
             bool: True if instruction was successfully inserted.
         """
-        if 0 <= indexInstruction <= len(self.commands):
-            self.commands.insert(indexInstruction, instruction)
+        if 0 <= indexInstruction <= len(self._commands):
+            self._commands.insert(indexInstruction, instruction)
             return True
         return False
     
@@ -120,8 +141,8 @@ class Script(File):
         Returns:
             bool: True if instruction was successfully removed.
         """
-        if 0 <= indexInstruction < len(self.commands):
-            self.commands.pop(indexInstruction)
+        if 0 <= indexInstruction < len(self._commands):
+            self._commands.pop(indexInstruction)
             return True
         return False
     
@@ -130,7 +151,7 @@ class Script(File):
 
     def __str__(self):
         output = ""
-        for operation in self.commands:
+        for operation in self._commands:
             output += "\n\n" + str(operation)
         return output
 
@@ -166,7 +187,7 @@ class LaytonScript(Script):
             return bankOperands
         
         def populateInstructionOperands(bankOperands):
-            for command in self.commands:
+            for command in self._commands:
                 for indexInstruction in range(command.indexOperandsStart, command.indexOperandsStart + command.countOperands):
                     command.operands.append(bankOperands[indexInstruction])
 
@@ -182,8 +203,8 @@ class LaytonScript(Script):
 
             reader.seek(offsetHeader)
             for indexCommand in range(countCommand):
-                self.commands.append(FutureInstruction.fromData(reader.read(8)))
-                countOperands = max(countOperands, self.commands[indexCommand].indexOperandsStart + self.commands[indexCommand].countOperands)
+                self._commands.append(FutureInstruction.fromData(reader.read(8)))
+                countOperands = max(countOperands, self._commands[indexCommand].indexOperandsStart + self._commands[indexCommand].countOperands)
             
             bankOperand = getBankOperand(reader, offsetOperands, countOperands, bankString)
             populateInstructionOperands(bankOperand)
@@ -197,7 +218,7 @@ class GdScript(Script):
     def cullUnreachableInstructions(self):
         # TODO - Not optimal, doesn't evaluate branches. Just cleans breakpoint
         isCurious = False
-        for instruction in self.commands:
+        for instruction in self._commands:
             for operand in instruction.operands:
                 operand : Operand
                 if operand.type == 6 or operand.type == 7:
@@ -209,7 +230,7 @@ class GdScript(Script):
         if not(isCurious):
             idxInstruction = 0
             hitBreakpoint = False
-            for instruction in self.commands:
+            for instruction in self._commands:
                 idxInstruction += 1
                 for operand in instruction.operands:
                     if operand.type == 0xc:
@@ -219,7 +240,7 @@ class GdScript(Script):
                     break
 
             if hitBreakpoint:
-                self.commands = self.commands[:idxInstruction]
+                self._commands = self._commands[:idxInstruction]
             
         return super().cullUnreachableInstructions()
 
@@ -265,7 +286,7 @@ class GdScript(Script):
             lastType = reader.readU16()
             if lastType == 0:
                 if command != None:
-                    self.commands.append(command)
+                    self._commands.append(command)
                 command = Instruction()
                 if isTalkscript:
                     command.opcode = lastType.to_bytes(2, byteorder = 'little')
@@ -289,7 +310,7 @@ class GdScript(Script):
                 command.operands.append(Operand(lastType, reader.readS32()))
 
         if command != None: # Bugfix where last command missing
-            self.commands.append(command)
+            self._commands.append(command)
         
         if not(isTalkscript):
             # TODO - Further research into instruction culling

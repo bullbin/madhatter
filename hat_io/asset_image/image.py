@@ -524,7 +524,10 @@ class AnimatedImage():
         workingFrame    = AnimationFrame()
         workingAnim     = Animation()
         
-        for command in scriptAnim.commands:
+        for indexCommand in range(scriptAnim.getInstructionCount()):
+
+            command = scriptAnim.getInstruction(indexCommand)
+
             if command.opcode == OPCODE_LOAD_ASSET:
                 atlasesAsIndex[len(atlasesAsIndex)] = command.operands[0].value
 

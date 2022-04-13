@@ -1,3 +1,0 @@
-ID_TOP_SCREEN       = 0
-ID_BOTTOM_SCREEN    = 1
-ID_FULLSCREEN       = 2

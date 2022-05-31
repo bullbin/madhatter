@@ -74,7 +74,7 @@ def getPaletteFromImages(images):
             for x in range(width):
                 colourSlice.putpixel((colourSliceIndex,0), image.getpixel((x,y)))
                 colourSliceIndex += 1
-    colourSlice = colourSlice.quantize(colors=TiledImageHandler.MAX_COUNT_COLOURS)
+    colourSlice = colourSlice.quantize(colors=TiledImageHandler.MAX_COUNT_COLOURS - 1)
     return colourSlice.getpalette()
 
 class Tile():
@@ -202,7 +202,7 @@ class TileProlongedDecode(Tile):
 
 class TiledImageHandler():
 
-    MAX_COUNT_COLOURS = 250
+    MAX_COUNT_COLOURS = 200
     COLOUR_ALPHA = [0,255,0]
 
     def __init__(self):
@@ -383,7 +383,7 @@ class TiledImageHandler():
                 for x in range(width):
                     for y in range(height):
                         r,g,b = imagePaddedPalette.getpixel((x,y))
-                        imagePaddedPalette.putpixel((x,y), (eightToFive(r), eightToFive(g), eightToFive(b)))  
+                        imagePaddedPalette.putpixel((x,y), (eightToFive(r), eightToFive(g), eightToFive(b)))
                 imagePaddedPalette = imagePaddedPalette.quantize(colors=(TiledImageHandler.MAX_COUNT_COLOURS - 1))
 
                 # Scale palette back to 8 bit space so dither can be more perceptually accurate
@@ -393,9 +393,17 @@ class TiledImageHandler():
                     newPalette.append(fiveToEight(val))
                 imagePaddedPalette.putpalette(newPalette)
 
-                # Finally dither (PIL doesn't dither on initial for some reason)
+                # PIL adds black as filler in its palette. Remove all black to prevent second quantization adding black
                 countColors = getMaxPaletteValue(imagePaddedPalette) + 1
-                imagePadded = imagePadded.quantize(countColors, palette=imagePaddedPalette, dither=Image.FLOYDSTEINBERG)
+                for idxFixColor in range((len(palette) // 3) - countColors):
+                    baseAddress = (countColors + idxFixColor) * 3
+                    for trip in range(3):
+                        newPalette[trip + baseAddress] = newPalette[trip]
+
+                imagePaddedPalette.putpalette(newPalette)
+                
+                # Finally dither (PIL doesn't dither on initial for some reason, plus the colors argument is ignored here)
+                imagePadded = imagePadded.quantize(colors=countColors, palette=imagePaddedPalette, dither=Image.FLOYDSTEINBERG)
             
             countColors = getMaxPaletteValue(imagePadded) + 1
             alphaPalette = TiledImageHandler.COLOUR_ALPHA + imagePadded.getpalette()[0:countColors * 3]

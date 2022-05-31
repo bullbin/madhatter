@@ -101,7 +101,7 @@ class File():
             return compressed
 
         compList = [copyCompress(self.compressHuffman), copyCompress(partial(self.compressHuffman, True)),
-                    copyCompress(self.compressLz10),    self.data]
+                    copyCompress(self.compressLz10)]
         compList.sort(key=len)
         self.data = compList[0]
 

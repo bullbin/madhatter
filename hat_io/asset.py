@@ -394,7 +394,7 @@ class LaytonPack(Archive):
     METADATA_BLOCK_SIZE = 16
     MAGIC               = [b'LPCK', b'PCK2']
 
-    def __init__(self, name="", version = 0):
+    def __init__(self, name="", version = 1):
         Archive.__init__(self, name=name)
         self._version = version
 
@@ -406,7 +406,6 @@ class LaytonPack(Archive):
             reader.seek(4,1)    # Skip countFile (v0)
         magic = reader.read(4)
         try:
-            # self._version = LaytonPack.MAGIC.index(magic)
             reader.seek(offsetHeader)
             while reader.tell() != lengthArchive:
                 metadata = reader.readU32List(4)
@@ -418,12 +417,16 @@ class LaytonPack(Archive):
             return False
     
     def save(self):
-        # TODO - Support writing LT2 PCK files, which differ only in that they specify the start offset of the file.
         writer = binary.BinaryWriter()
         writer.writeU32(16)
         writer.writeU32(0)
-        writer.writeU32(len(self.files))
-        writer.write(LaytonPack.MAGIC[self._version])
+        if self._version == 1:
+            writer.write(LaytonPack.MAGIC[self._version])
+            writer.writeU32(0)
+        else:
+            writer.writeU32(len(self.files))
+            writer.write(LaytonPack.MAGIC[self._version])
+
         for fileChunk in self.files:
             header = binary.BinaryWriter()
             data = binary.BinaryWriter()

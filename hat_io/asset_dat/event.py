@@ -1,5 +1,6 @@
+from typing import List
 from ..asset import File
-from ..binary import BinaryReader
+from ..binary import BinaryReader, BinaryWriter
 
 # TODO - Getters and setters and output, plus replace the implementation in the room handler
 
@@ -35,3 +36,28 @@ class EventData(File):
                 self.charactersShown.append(True)
         for _indexChar in range(8):
             self.charactersInitialAnimationIndex.append(reader.readUInt(1))
+
+    def save(self):
+        writer = BinaryWriter()
+
+        def padListToEight(inList : List[int]):
+            for x in range(8):
+                if x < len(inList):
+                    writer.writeInt(inList[x], 1, signed=False)
+                else:
+                    writer.writeInt(0, 1)
+
+        writer.writeU16(self.mapBsId)
+        writer.writeU16(self.mapTsId)
+        writer.writeInt(self.behaviour, 1, signed=False)
+
+        # TODO - Skipping sound
+        writer.pad(1)
+        padListToEight(self.characters)
+        padListToEight(self.charactersPosition)
+        padListToEight(self.charactersShown)
+        padListToEight(self.charactersInitialAnimationIndex)
+
+        # TODO - Sound related but not read
+        writer.pad(2)
+        self.data = writer.data

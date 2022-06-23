@@ -60,7 +60,7 @@ class DlzData(File):
         writerHeader.writeU16(DlzData.MAGIC_VERSION)
         writerHeader.writeU32(self.lengthEntry)
         writerHeader.write(writerData.data)
-        return writerHeader.data
+        self.data = writerHeader.data
     
     def _isEntryValid(self, entry) -> bool:
         if type(entry) == self._entryType:

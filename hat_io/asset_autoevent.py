@@ -57,6 +57,8 @@ class AutoEvent(File):
 
                 if chapterStart != 0 or chapterEnd != 0:
                     self.entries[indexRoom].setSubPlaceEntry(indexSubRoom, AutoEventSubPlaceEntry(idEvent, chapterStart, chapterEnd))
+        
+        self.data = data
     
     def save(self):
         writer = BinaryWriter()

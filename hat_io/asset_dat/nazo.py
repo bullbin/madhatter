@@ -92,6 +92,7 @@ class NazoData(File):
         for indexHint in range(3):
             self.setHintAtIndex(indexHint, seekAndReadNullTerminatedString(lengthHeader + reader.readU32()))
         
+        self.data = data
         return True
 
     def _saveFlags(self, writer : BinaryWriter):

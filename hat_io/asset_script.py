@@ -208,6 +208,7 @@ class LaytonScript(Script):
             
             bankOperand = getBankOperand(reader, offsetOperands, countOperands, bankString)
             populateInstructionOperands(bankOperand)
+            self.data = data
             return True
         return False
 
@@ -318,3 +319,4 @@ class GdScript(Script):
             #     we end script execution.
             # Behaviour not understood for LAYTON1 with branching.
             self.cullUnreachableInstructions()
+        self.data = data

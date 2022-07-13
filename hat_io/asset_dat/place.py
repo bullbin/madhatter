@@ -328,11 +328,15 @@ class PlaceData(File):
                 reader.seek(reader.tell() + (Exit.getLength(isHd) * (11 - exitIndex)))
                 break
         
+        # TODO - HD pad
+        reader.seek(48, 1)
         # TODO - Is this signed?
         if isHd:
             self.idSound = reader.readU32()
         else:
             self.idSound = reader.readU16()
+        
+        self.data = data
 
     def _loadHd(self, data : bytes):
         self._load(data, True)
@@ -384,10 +388,15 @@ class PlaceData(File):
             else:
                 writer.pad(Exit.getLength(isHd))
         
+        # Game reads into itself
+        # TODO - HD pad
+        writer.pad(48)
+
         if isHd:
             writer.writeU32(self.idSound)
         else:
             writer.writeU16(self.idSound)
+        self.data = writer.data
 
     def _saveHd(self):
         self._save(True)
@@ -402,7 +411,7 @@ class PlaceDataNds(PlaceData):
     def load(self, data : bytes):
         self._loadNds(data)
     
-    def save(self, data : bytes):
+    def save(self):
         self._saveNds()
 
 class PlaceDataHd(PlaceData):
@@ -412,5 +421,5 @@ class PlaceDataHd(PlaceData):
     def load(self, data : bytes):
         self._loadHd(data)
     
-    def save(self, data : bytes):
+    def save(self):
         self._saveHd()

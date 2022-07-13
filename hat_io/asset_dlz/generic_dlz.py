@@ -44,6 +44,7 @@ class DlzData(File):
             reader.seek(DlzData.ENTRY_OFFSET)
             for _indexEntry in range(countEntries):
                 self.addEntryFromData(reader.read(self.lengthEntry))
+        self.data = data
     
     def save(self):
         writerHeader = BinaryWriter()

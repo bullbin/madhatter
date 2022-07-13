@@ -1,3 +1,4 @@
+from typing import List
 import ndspy.lz10
 from functools import partial
 from os import makedirs
@@ -373,7 +374,7 @@ class File():
 class Archive(File):
     def __init__(self, name=""):
         File.__init__(self, name=name)
-        self.files = []
+        self.files : List[File] = []
 
     def extract(self, filepath):
         outputFilepath = "\\".join(filepath.split("\\")) + "\\" + self.name.split("\\")[-1]
@@ -399,6 +400,7 @@ class LaytonPack(Archive):
         self._version = version
 
     def load(self, data):
+        self.data = data
         reader = binary.BinaryReader(data = data)
         offsetHeader = reader.readU32()
         lengthArchive = reader.readU32()
@@ -431,6 +433,9 @@ class LaytonPack(Archive):
             header = binary.BinaryWriter()
             data = binary.BinaryWriter()
             data.writeString(fileChunk.name, ENCODING_DEFAULT_STRING)
+            # TODO - General fix on null terminated strings! How did this go unnoticed??
+            data.write(b'\x00')
+
             data.align(4)
             header.writeU32(data.tell() + LaytonPack.METADATA_BLOCK_SIZE)
             data.write(fileChunk.data)

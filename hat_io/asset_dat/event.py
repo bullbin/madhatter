@@ -36,6 +36,8 @@ class EventData(File):
                 self.charactersShown.append(True)
         for _indexChar in range(8):
             self.charactersInitialAnimationIndex.append(reader.readUInt(1))
+            
+        self.data = data
 
     def save(self):
         writer = BinaryWriter()

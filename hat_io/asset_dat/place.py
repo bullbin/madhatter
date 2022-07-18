@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional
 from ..asset import File
 from ..binary import BinaryReader, BinaryWriter
@@ -11,12 +12,33 @@ class BoundingBox():
         self.width  = width
         self.height = height
     
+    def __eq__(self, other : object) -> bool:
+        if type(other) != BoundingBox:
+            return False
+        return self.x == other.x and self.y == other.y and self.width == other.width and self.height == other.height
+
+    def cloneInto(self, other : BoundingBox):
+        """Copy the values of another boundary into this one. This will break no references.
+
+        Args:
+            other (BoundingBox): Source boundary to copy into.
+        """
+        self.x = other.x
+        self.y = other.y
+        self.width = other.width
+        self.height = other.height
+
     def isEmpty(self):
         return self.x == 0 and self.y == 0 and self.width == 0 and self.height == 0
 
 class HintCoin():
     def __init__(self):
-        self.bounding = BoundingBox(0,0,0,0)
+        self.bounding = BoundingBox(0,0,16,16)
+
+    def __eq__(self, other : object) -> bool:
+        if type(other) != HintCoin:
+            return False
+        return self.bounding == other.bounding
 
     @staticmethod
     def getLength(isHd : bool):
@@ -55,6 +77,12 @@ class Exit():
         self.modeDecoding   = 0
         self.spawnData      = 0
     
+    def __eq__(self, other : object) -> bool:
+        # TODO - Loose equality?
+        if type(other) != Exit:
+            return False
+        return self.bounding == other.bounding and self.posTransition == other.posTransition and self.idImage == other.idImage and self.idSound == other.idSound and self.modeDecoding == other.modeDecoding and other.spawnData == self.spawnData
+
     @staticmethod
     def getLength(isHd : bool):
         if isHd:
@@ -113,6 +141,11 @@ class TObjEntry():
         self.idChar = 0
         self.idTObj = 0
     
+    def __eq__(self, other: object) -> bool:
+        if type(other) != TObjEntry:
+            return False
+        return self.bounding == other.bounding and self.idChar == other.idChar and self.idTObj == other.idTObj
+
     @staticmethod
     def getLength(isHd : bool):
         if isHd:
@@ -148,6 +181,11 @@ class BgAni():
     def __init__(self):
         self.pos = (0,0)
         self.name = ""
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) != BgAni:
+            return False
+        return self.pos == other.pos and self.name == other.name
     
     @staticmethod
     def getLength(isHd : bool):
@@ -186,6 +224,11 @@ class EventEntry():
         self.idImage = 0
         self.idEvent = 0
     
+    def __eq__(self, other: object) -> bool:
+        if type(other) != EventEntry:
+            return False
+        return self.bounding == other.bounding and self.idImage == other.idImage and self.idEvent == other.idEvent
+
     @staticmethod
     def getLength(isHd : bool):
         if isHd:
@@ -248,6 +291,27 @@ class PlaceData(File):
             return self._objEvents[indexObj]
         return None
     
+    def addObjEvent(self, entry : EventEntry) -> Optional[int]:
+        """Add an event launcher entry into this place data.
+
+        Args:
+            entry (EventEntry): Event entry to add.
+
+        Returns:
+            Optional[int]: Index of new entry if the entry fits in bounds, None otherwise.
+        """
+        output = None
+        if self.getCountObjEvents() < 16:
+            output = self.getCountObjEvents()
+            self._objEvents.append(entry)
+        return output
+    
+    def removeObjEvent(self, indexObj : int) -> bool:
+        if 0 <= indexObj < self.getCountObjEvents():
+            self._objEvents.pop(indexObj)
+            return True
+        return False
+    
     def getCountObjBgEvent(self) -> int:
         return len(self._objBgAni)
     
@@ -255,6 +319,18 @@ class PlaceData(File):
         if 0 <= indexObj < self.getCountObjBgEvent():
             return self._objBgAni[indexObj]
         return None
+    
+    def addObjBgEvent(self, entry : BgAni) -> Optional[int]:
+        if self.getCountObjBgEvent() < 12:
+            self._objBgAni.append(entry)
+            return self.getCountObjBgEvent() - 1
+        return None
+    
+    def removeObjBgEvent(self, indexObj : int) -> bool:
+        if 0 <= indexObj < self.getCountObjBgEvent():
+            self._objBgAni.pop(indexObj)
+            return True
+        return False
     
     def getCountObjText(self) -> int:
         return len(self._objText)
@@ -264,6 +340,18 @@ class PlaceData(File):
             return self._objText[indexObj]
         return None
     
+    def addObjText(self, entry : TObjEntry) -> Optional[int]:
+        if 0 <= self.getCountObjText() < 16:
+            self._objText.append(entry)
+            return self.getCountObjText() - 1
+        return None
+
+    def removeObjText(self, indexObj : int) -> bool:
+        if 0 <= indexObj < self.getCountObjText():
+            self._objText.pop(indexObj)
+            return True
+        return False
+
     def getCountHintCoin(self) -> int:
         return len(self._objHints)
 
@@ -272,6 +360,26 @@ class PlaceData(File):
             return self._objHints[indexObj]
         return None
     
+    def addObjHintCoin(self, entry : HintCoin) -> Optional[int]:
+        """Add a hint coin to this place data.
+
+        Args:
+            entry (HintCoin): Hint coin entry.
+
+        Returns:
+            Optional[int]: Index of new entry if the entry fits in bounds, None otherwise.
+        """
+        if self.getCountHintCoin() < 4:
+            self._objHints.append(entry)
+            return self.getCountHintCoin() - 1
+        return None
+    
+    def removeObjHintCoin(self, indexObj : int) -> bool:
+        if 0 <= indexObj < self.getCountHintCoin():
+            self._objHints.pop(indexObj)
+            return True
+        return False
+
     def getCountExits(self) -> int:
         return len(self._exits)
 
@@ -279,6 +387,18 @@ class PlaceData(File):
         if 0 <= indexExit < self.getCountExits():
             return self._exits[indexExit]
         return None
+
+    def addExit(self, entry : Exit) -> Optional[int]:
+        if self.getCountExits() < 12:
+            self._exits.append(entry)
+            return self.getCountExits() - 1
+        return None
+    
+    def removeExit(self, indexObj : int) -> bool:
+        if 0 <= indexObj < self.getCountExits():
+            self._exits.pop(indexObj)
+            return True
+        return False
 
     def _load(self, data : bytes, isHd : bool = False):
         reader = BinaryReader(data=data)
@@ -403,7 +523,7 @@ class PlaceData(File):
 
     def _saveNds(self):
         self._save(False)
-    
+
 class PlaceDataNds(PlaceData):
     def __init__(self):
         super().__init__()

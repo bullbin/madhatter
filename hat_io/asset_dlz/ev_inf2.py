@@ -9,7 +9,8 @@ class DlzEntryEvInf2(DlzEntryNull):
 
     LENGTH_ENTRY = 12
 
-    def __init__(self, idEvent, typeEvent, dataSoundSet, dataPuzzle, indexEventViewedFlag, indexStoryFlag):
+    def __init__(self, idEvent : Optional[int], typeEvent : Optional[int], dataSoundSet : Optional[int],
+                 dataPuzzle : Optional[int], indexEventViewedFlag : Optional[int], indexStoryFlag : Optional[int]):
         DlzEntryNull.__init__(self)
         self.idEvent                = idEvent
         self.typeEvent              = typeEvent
@@ -55,6 +56,10 @@ class EventInfoList(DlzData):
         DlzData.__init__(self)
         self._entryType = DlzEntryEvInf2
         self._eventLookup = {}
+
+    def save(self):
+        self._entries.sort(key=lambda x: x.idEvent)
+        return super().save()
     
     def getEntry(self, indexEntry: int) -> Optional[DlzEntryEvInf2]:
         return super().getEntry(indexEntry)

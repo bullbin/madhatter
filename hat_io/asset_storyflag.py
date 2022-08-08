@@ -18,8 +18,9 @@ class FlagGroup():
     COUNT_FLAGS_PER_GROUP = 8
 
     def __init__(self, chapter=0):
-        self.chapter = chapter
-        self.flags = []
+        # TODO - Hide all these variables...
+        self.chapter : int = chapter
+        self.flags : List[Flag] = []
         for _nullFlag in range(FlagGroup.COUNT_FLAGS_PER_GROUP):
             self.flags.append(Flag())
     
@@ -39,6 +40,29 @@ class FlagGroup():
         if 0 <= index < FlagGroup.COUNT_FLAGS_PER_GROUP:
             return self.flags[index]
         return None
+    
+    def getFirstEmptyFlag(self) -> Optional[Flag]:
+        for flag in self.flags:
+            if flag.type == 0:
+                return flag
+        return None
+    
+    def isEmpty(self):
+        for flag in self.flags:
+            if flag.type != 0:
+                return False
+        return True
+    
+    def isFull(self):
+        for flag in self.flags:
+            if flag.type == 0:
+                return True
+        return False
+
+    def clear(self):
+        for flag in self.flags:
+            flag.type = 0
+            flag.param = 0
 
 class StoryFlag(File):
 
@@ -70,6 +94,7 @@ class StoryFlag(File):
                 writer.writeInt(flag.type, 1)
                 writer.pad(1)
                 writer.writeU16(flag.param)
+        self.data = writer.data
     
     def getIndexFromChapter(self, chapter : int) -> Optional[int]:
         """Returns the index for the flag group corresponding to this chapter.

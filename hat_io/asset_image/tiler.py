@@ -267,7 +267,7 @@ class TiledImageHandler():
                 self.paletteRgbTriplets.append(tempTriplet)
             # TODO - Remap list in case of duplicates
 
-        logVerbose("Palette set to", len(self.paletteRgbTriplets))
+        logVerbose("Palette set to", len(self.paletteRgbTriplets), name="Tiler")
 
     # TODO - Improve tile support for arj and rewrite to force typing (make more resilient)
     # TODO - Multithread decoding for speedup especially on backgrounds
@@ -344,17 +344,17 @@ class TiledImageHandler():
             return getDimensionSplits(dimension, maxDim=128)
 
         # TODO : Extend palette, change palette, etc
-        logVerbose("Called to convert!")
-        logVerbose("\tInput:", image.mode)
+        logVerbose("Called to convert!", name="TilerToTile")
+        logVerbose("\tInput:", image.mode, name="TilerToTile")
         imagePadded = alignToFitTile(image)
         width, height = imagePadded.size
-        logVerbose("\tNew dimensions", width, "x", height)
+        logVerbose("\tNew dimensions", width, "x", height, name="TilerToTile")
         if width > (2 ** 16 - 1) or height > (2 ** 16 - 1):
             return
         
         alphaFillPixels = []
         if imagePadded.mode == "RGBA":
-            logVerbose("Fixing alpha...")
+            logVerbose("Fixing alpha...", name="TilerToTile")
             # Get alpha pixels
             blurredImage = imagePadded.convert("RGB").filter(GaussianBlur(radius=4))
             compositedImage = Image.new("RGB", imagePadded.size)
@@ -370,7 +370,7 @@ class TiledImageHandler():
             imagePadded = compositedImage
 
         if imagePadded.mode != "P":
-            logVerbose("\tQuantizing...")
+            logVerbose("\tQuantizing...", name="TilerToTile")
             # TODO : Pick alpha colour based on whether it is not in the image
             if usePalette != []:
                 # assume palette is already 5 bit (bad)
@@ -416,7 +416,7 @@ class TiledImageHandler():
         self.extractPaletteFromImage(imagePadded)
         
         if useOffset:
-            logVerbose("\tFilling with offset data...")
+            logVerbose("\tFilling with offset data...", name="TilerToTile")
             tileHeights = getDimensionSplitsLayton2(height)
             tileWidths = getDimensionSplitsLayton2(width)
 
@@ -431,7 +431,7 @@ class TiledImageHandler():
                     x += tileX
                 y += tileY
         else:
-            logVerbose("\tFilling tilemap layout...")
+            logVerbose("\tFilling tilemap layout...", name="TilerToTile")
             tileIndex = 0
             # TODO : Verify length of tiles to not exceed selectable amount (not possible?)
             # TODO : Improve detection to find mirrored tiles too

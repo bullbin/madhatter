@@ -1,7 +1,7 @@
 from math import ceil
 from . import binary
 from .asset import File
-from ..common import log
+from ..common import log, logSevere
 
 CONST_PROCYON_COEF      = [(0,0),
                            (60,0),
@@ -78,7 +78,7 @@ class MusicSadlAsWave(File):
             filesize = reader.readU32()
                 
             if coding == 0x70:
-                log("Unsupported: INT_IMA")
+                logSevere("INT_IMA decoding unimplemented!", name="AudioSADL")
                 sampleNumber = int((filesize - 0x100) / countChannels * 2)
                 self.data = bytearray(b'')
             else:

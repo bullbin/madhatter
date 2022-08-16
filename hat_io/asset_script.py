@@ -272,6 +272,11 @@ class GdScript(Script):
         #     but it's otherwise redundant, length is checked anyways.
         # TODO - Collapse repeated breakpoints (have to check for LAYTON2 behaviour)
         scriptWriter.write(b'\x0c\x00')
+        if isTalkscript:
+            if len(scriptWriter.data) >= 4:
+                # HACK (not big) - Chop off 4 bytes, 0 padding for original script and initial command
+                scriptWriter.data = scriptWriter.data[4:]
+
         self.data = len(scriptWriter.data).to_bytes(4, byteorder = 'little') + scriptWriter.data
 
     def load(self, data, isTalkscript=False):
@@ -281,6 +286,9 @@ class GdScript(Script):
         if isTalkscript:
             # Seek backwards to allow command to read as 0
             # Not based on binary, but game doesn't care when reading talkscripts as it only wants the operands
+
+            # Verified - When running from binary, talkscript reading commands bypass reading command and start at 0x4
+            # They just fetch next operand as needed
             reader.seek(2)
         command = None
         while reader.tell() < length + 4:

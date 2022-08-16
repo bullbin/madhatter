@@ -145,8 +145,8 @@ class AnimatedImage():
 
         countSubImage = reader.readU16()
         givenBpp = 2 ** (reader.readU16() - 1)
-        logVerbose("Frames", countSubImage)
-        logVerbose("Bpp", givenBpp)
+        logVerbose("Frames", countSubImage, name="ImgImpArc")
+        logVerbose("Bpp", givenBpp, name="ImgImpArc")
 
         if isArj:
             countColours = reader.readU32()
@@ -155,10 +155,10 @@ class AnimatedImage():
         tempWorkingImageResolutions = []
 
         for indexImage in range(countSubImage):
-            logVerbose("Add Image")
+            logVerbose("Add Image", name="ImgImpArc")
             resolution = (reader.readU16(), reader.readU16())
             countTiles = reader.readU32()
-            logVerbose("\t", resolution, countTiles)
+            logVerbose("\t", resolution, countTiles, name="ImgImpArc")
             workingImage = TiledImageHandler()
             for _indexTile in range(countTiles):
                 # TODO - Are tiles written if empty?

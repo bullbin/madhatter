@@ -359,7 +359,7 @@ class File():
                 dataOut.write(self.data)
             return True
         except IOError:
-            logSevere("Error writing file!")
+            logSevere("Error writing file!", name="FileExport")
             return False
     
     @staticmethod
@@ -367,7 +367,7 @@ class File():
         reader = binary.BinaryReader(filename = filepath)
         tempName = filepath.split("//")[-1]
         if tempName == "":
-            logSevere("Warning: Invalid filename!")
+            logSevere("Invalid filename!", name="FileImport")
             tempName = "NULL"
         return File(name=tempName, data=reader.data)
 

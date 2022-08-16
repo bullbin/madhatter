@@ -13,7 +13,7 @@ class BinaryReader():
                 with open(filename, 'rb') as dataIn:
                     self.data = bytearray(dataIn.read())
             except FileNotFoundError:
-                logSevere("Path", filename, "doesn't exist!")
+                logSevere("Path", filename, "doesn't exist!", name="BinImport")
                 self.data = bytearray(data)
             except IOError:
                 self.data = bytearray(data)

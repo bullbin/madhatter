@@ -1,4 +1,4 @@
-from typing import Optional, Type
+from typing import List, Optional, Type
 from ..asset import File
 from ..binary import BinaryReader, BinaryWriter
 
@@ -46,18 +46,23 @@ class DlzData(File):
                 self.addEntryFromData(reader.read(self.lengthEntry))
         self.data = data
     
+    def _getFormattedEntriesForWriting(self) -> List[DlzEntry]:
+        output = []
+        for indexEntry in range(self.getCountEntries()):
+            output.append(self.getEntry(indexEntry))
+        return output
+
     def save(self):
         writerHeader = BinaryWriter()
         writerData = BinaryWriter()
 
-        countEntry = 0
-        for indexEntry in range(self.getCountEntries()):
-            workingEntryBytes = self.getEntry(indexEntry).toBytes()
+        entries = self._getFormattedEntriesForWriting()
+        for entry in entries:
+            workingEntryBytes = entry.toBytes()
             if len(workingEntryBytes) == self.lengthEntry:
                 writerData.write(workingEntryBytes)
-                countEntry += 1
         
-        writerHeader.writeU16(countEntry)
+        writerHeader.writeU16(len(entries))
         writerHeader.writeU16(DlzData.MAGIC_VERSION)
         writerHeader.writeU32(self.lengthEntry)
         writerHeader.write(writerData.data)

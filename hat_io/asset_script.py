@@ -25,6 +25,13 @@ class Instruction():
             if operand.type != 0xc:
                 output.append(operand)
         return output
+    
+    def copy(self) -> Instruction:
+        output = Instruction()
+        output.opcode = self.opcode
+        for operand in self.operands:
+            output.operands.append(Operand(operand.type, operand.value))
+        return output
 
     def __str__(self):
         if self.opcode == None:

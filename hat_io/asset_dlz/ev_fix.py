@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from ..binary import BinaryReader, BinaryWriter
 from .generic_dlz import DlzEntryNull, DlzData
 
@@ -44,6 +44,13 @@ class EventBaseList(DlzData):
 
     def _removeEntryFromDb(self, entry: DlzEntryEvFix):
         del self._eventLookup[entry.idEvent]
+
+    def _getFormattedEntriesForWriting(self) -> List[DlzEntryEvFix]:
+        keys = sorted(list(self._eventLookup.keys()))
+        output = []
+        for key in keys:
+            output.append(self._eventLookup[key])
+        return output
 
     def searchForEntry(self, idEvent : int) -> Optional[DlzEntryEvFix]:
         if idEvent in self._eventLookup:

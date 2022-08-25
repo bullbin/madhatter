@@ -1,6 +1,6 @@
 from typing import Optional
 
-from widebrim.madhatter.hat_io.asset_image.colour import eightToFive, fiveToEight
+from ...hat_io.asset_image.colour import eightToFive, fiveToEight
 from ..binary import BinaryWriter
 from ...common import logVerbose
 from PIL import Image
@@ -75,7 +75,7 @@ def getPaletteFromImages(images):
                 colourSlice.putpixel((colourSliceIndex,0), image.getpixel((x,y)))
                 colourSliceIndex += 1
     colourSlice = colourSlice.quantize(colors=TiledImageHandler.MAX_COUNT_COLOURS - 1)
-    return colourSlice.getpalette()
+    return colourSlice
 
 class Tile():
 
@@ -368,11 +368,13 @@ class TiledImageHandler():
                         alphaFillPixels.append((x,y))
 
             imagePadded = compositedImage
-
+            
         if imagePadded.mode != "P":
             logVerbose("\tQuantizing...", name="TilerToTile")
-            # TODO : Pick alpha colour based on whether it is not in the image
+            # TODO - Pick alpha colour based on whether it is not in the image
+            # TODO - Fix off-by-one bug where quantizing gives itself access to black
             if usePalette != []:
+                logVerbose("Quantize source found!", usePalette, name="TilerToTile")
                 # assume palette is already 5 bit (bad)
                 imagePadded = imagePadded.quantize(palette=usePalette, dither=Image.FLOYDSTEINBERG)
             else:

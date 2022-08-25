@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Callable, Dict, List, Optional, Tuple
 from PIL import Image
 from PIL.Image import Image as ImageType
@@ -31,9 +32,9 @@ def mergePalettedImage(inputImage, outputImage, pos):
                 outputImage.putpixel((x + pos[0],y + pos[1]), inputImage.getpixel((x,y)))
 
 class AnimationFramePartialDetails():
-    def __init__(self, atlasImage, atlasSubImageIndex):
-        self.atlasImageReference = atlasImage
-        self.atlasSubImageIndex  = atlasSubImageIndex
+    def __init__(self, atlasImage : StaticImage, atlasSubImageIndex : int):
+        self.atlasImageReference : StaticImage = atlasImage
+        self.atlasSubImageIndex  : int = atlasSubImageIndex
         self.pos                 = (0,0)
 
 class AnimationFrame():
@@ -231,26 +232,27 @@ class AnimatedImage():
                     output.variables[variableNames[indexVariable]][indexData] = reader.readS16()
             
             offsetSubAnimationData = reader.tell()
-            if callable(functionGetFileByName):
-                try:
-                    reader.seek(int(5 * countAnims), 1)
-                    nameSubAnimation = reader.readPaddedString(128, ENCODING_DEFAULT_STRING)
-                    if nameSubAnimation != "":
+            
+            reader.seek(int(5 * countAnims), 1)
+            nameSubAnimation = reader.readPaddedString(128, ENCODING_DEFAULT_STRING)
+            if nameSubAnimation != "":
+                
+                if callable(functionGetFileByName):
+                    try:
                         subAnimationData = functionGetFileByName(nameSubAnimation)
                         if subAnimationData != None:
                             output.subAnimation = AnimatedImage.fromBytesArc(subAnimationData, functionGetFileByName=functionGetFileByName)
+                    except:
+                        pass
 
-                            reader.seek(offsetSubAnimationData)
-                            tempOffset = [[],[]]
-                            for indexDimension in range(2):
-                                for indexOffset in range(countAnims):
-                                    tempOffset[indexDimension].append(reader.readS16())
-                            for indexAnim in range(countAnims):
-                                output.animations[indexAnim].subAnimationOffset = (tempOffset[0][indexAnim], tempOffset[1][indexAnim])
-                                output.animations[indexAnim].subAnimationIndex = reader.readUInt(1)
-
-                except:
-                    pass
+                reader.seek(offsetSubAnimationData)
+                tempOffset = [[],[]]
+                for indexDimension in range(2):
+                    for indexOffset in range(countAnims):
+                        tempOffset[indexDimension].append(reader.readS16())
+                for indexAnim in range(countAnims):
+                    output.animations[indexAnim].subAnimationOffset = (tempOffset[0][indexAnim], tempOffset[1][indexAnim])
+                    output.animations[indexAnim].subAnimationIndex = reader.readUInt(1)   
 
         return output
 
@@ -442,6 +444,7 @@ class AnimatedImage():
             images.append(frame.getComposedFrame())
         
         if len(images) > 0:
+            # TODO - Bugfix - needs to be image output
             palette  = getPaletteFromImages(images)
 
             packedImages = []
@@ -457,7 +460,8 @@ class AnimatedImage():
             writer : binary.BinaryWriter = binary.BinaryWriter()
             writer.writeU16(len(images))
 
-            encodedBpp = int(log(packedImages[0].getBpp(), 2) + 1)
+            outputBpp = packedImages[0].getBpp()
+            encodedBpp = int(log(outputBpp, 2) + 1)
             writer.writeU16(encodedBpp)
 
             for indexImage, image in enumerate(packedImages):
@@ -472,7 +476,7 @@ class AnimatedImage():
                     tileX, tileY = tile.image.size
                     writer.writeU16(int(log(tileX, 2) - 3))
                     writer.writeU16(int(log(tileY, 2) - 3))
-                    writer.write(tile.toBytes(packedImages[0].getBpp()))
+                    writer.write(tile.toBytes(outputBpp))
             
             palette = image.getPalette()    # Switch to RGB triplets
             writer.writeU32(len(palette))
@@ -486,16 +490,18 @@ class AnimatedImage():
 
             for anim in self.animations:
                 writer.writeU32(len(anim.keyframes))
+                # TODO - Fix this... for now we'll just rearrange...
+                for indexShifted in range(len(anim.keyframes)):
+                    indexShifted = (indexShifted + 1) % len(anim.keyframes)
+                    writer.writeU32(indexShifted)
                 for indexKeyframe, keyframe in enumerate(anim.keyframes):
-                    writer.writeU32(indexKeyframe)
-                for indexKeyframe, keyframe in enumerate(anim.keyframes):
-                    writer.writeU32(keyframe.duration)
+                    indexShifted = (indexKeyframe + 1) % len(anim.keyframes)
+                    writer.writeU32(anim.keyframes[indexShifted].duration)
                 for indexKeyframe, keyframe in enumerate(anim.keyframes):
                     writer.writeU32(keyframe.indexFrame)
             
             if exportVariables:
                 self._writeArcVariable(writer)
-            writer.write(b'\x00\x00')
 
             return writer.data
         return None

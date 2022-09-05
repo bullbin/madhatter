@@ -1,0 +1,3 @@
+PREPROCESS_DITHER   : int = 0
+PREPROCESS_SCALE    : int = 1
+PREPROCESS_NONE     : int = 2

@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from ...hat_io.asset_image.colour import eightToFive, fiveToEight
 from ..binary import BinaryWriter
 from ...common import logVerbose
+from PIL.Image import Image as ImageType
 from PIL import Image
 from PIL.ImageFilter import GaussianBlur
 from math import ceil, log
@@ -206,34 +207,34 @@ class TiledImageHandler():
     COLOUR_ALPHA = [0,255,0]
 
     def __init__(self):
-        self.tiles = []
-        self.tileMap = {}       # TilePackedPos -> Tile
-        self.paletteRgbTriplets = []
-        self.paletteContinuous = []
+        self.tiles              : List[Tile]                = []
+        self.tileMap            : Dict[int,int]             = {}       # TilePackedPos -> Tile
+        self.paletteRgbTriplets : List[Tuple[int,int,int]]  = []
+        self.paletteContinuous  : List[int]                 = []
     
-    def getLengthPalette(self):
+    def getLengthPalette(self) -> int:
         return len(self.paletteRgbTriplets)
 
-    def getBpp(self):
-        if self.getLengthPalette() == 1:
-            return 4
-        elif self.getLengthPalette() < 1 or self.getLengthPalette() > 256:
+    def getBpp(self) -> Optional[int]:
+        if self.getLengthPalette() < 1 or self.getLengthPalette() > 256:
             return None
+        elif self.getLengthPalette() < 16: # TODO - Min palette length
+            return 4
         return ceil(log(self.getLengthPalette(), 2) / 4) * 4
 
-    def getTiles(self):
+    def getTiles(self) -> List[Tile]:
         return self.tiles
 
-    def getPalette(self):
+    def getPalette(self) -> List[Tuple[int,int,int]]:
         return self.paletteRgbTriplets
 
-    def getTileMap(self):
+    def getTileMap(self) -> Dict[int,int]:
         return self.tileMap
 
-    def setTileMap(self, tileMap):
+    def setTileMap(self, tileMap : Dict[int,int]):
         self.tileMap = tileMap
 
-    def extractPaletteFromImage(self, image : Image) -> bool:
+    def extractPaletteFromImage(self, image : ImageType) -> bool:
         if image.mode != "P":
             return False
         
@@ -245,7 +246,7 @@ class TiledImageHandler():
             self.paletteRgbTriplets.append((palette[indexColor], palette[indexColor + 1], palette[indexColor + 2]))
         return True
 
-    def setPaletteFromList(self, palette, countColours=-1):
+    def setPaletteFromList(self, palette : List[int], countColours : int = -1):
         # TODO : Get palette from any internal tiles to prevent too little/too many colours being added
         self.paletteRgbTriplets = []
         
@@ -290,7 +291,7 @@ class TiledImageHandler():
             if type(tile) == TileProlongedDecode:
                 tile.decode(self.paletteContinuous)
  
-    def tilesToImage(self, resolution, useOffset = False):
+    def tilesToImage(self, resolution, useOffset = False) -> ImageType:
         self.decodeProlongedTiles()
         width, height = resolution
         output = Image.new("P", resolution)

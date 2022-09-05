@@ -1,14 +1,10 @@
-from .const import IMAGE_FORCE_FULL_RANGE_COLOUR
+from typing import List, Tuple
 
 def eightToFive(eight):
-    if IMAGE_FORCE_FULL_RANGE_COLOUR:
-        return round(eight/255 * 31)
-    return eight >> 3
+    return round(eight/255 * 31)
 
 def fiveToEight(five):
-    if IMAGE_FORCE_FULL_RANGE_COLOUR:
-        return round(five/31 * 255)
-    return five << 3
+    return round(five/31 * 255)
 
 def getPackedColourFromRgb888(r, g, b):
     r = eightToFive(r)
@@ -23,7 +19,7 @@ def getColoursAsListFromReader(reader):
     r = (packedColour & 0x1f)
     return (fiveToEight(r), fiveToEight(g), fiveToEight(b))
     
-def getPaletteAsListFromReader(reader, countPalette):
+def getPaletteAsListFromReader(reader, countPalette) -> List[Tuple[int,int,int]]:
     palette = []
     for _indexColour in range(countPalette):
         palette.extend(getColoursAsListFromReader(reader))

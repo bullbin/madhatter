@@ -42,7 +42,7 @@ def getConversionBasis(colorImage : ImageType, mode : int = PREPROCESS_DITHER,
 
     Args:
         image (ImageType): Image used for future processing. Mode is RGB.
-        mode (int, optional): _description_. Defaults to PREPROCESS_DITHER.
+        mode (int, optional): Preprocess mode constant. Defaults to PREPROCESS_DITHER.
 
     Returns:
         Tuple[ImageType, Optional[ImageType]]: Preprocessed image and alpha channel if present.

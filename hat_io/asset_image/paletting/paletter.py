@@ -25,7 +25,7 @@ def generate5BitEncodedPalette(image : ImageType,
                                fastKMeans : bool = True,
                                kMeansSamples : int = 25000,
                                seed : int = 1,
-                               thresholdCloseColors : Optional[float] = 0.0005) -> List[Tuple[float,float,float]]:
+                               thresholdCloseColors : Optional[float] = 0.00025) -> List[Tuple[float,float,float]]:
     """Function to generate a 5-bit compatible palette from the given image. K-means clustering is used for palette extraction. The output palette has been scaled by 255/31.
 
     An optional thresholding function is given to reduce the amount of colors output from the algorithm. This is enabled by default and collapses close colors into one by picking the first of the cluster.

@@ -41,12 +41,32 @@ def errorCorrectionDithering(image : np.ndarray, funcGetClosestColor : Callable[
     
     return image
 
-def floydSteinbergDither(image : np.ndarray, funcGetClosestColor : Callable[[np.ndarray], np.ndarray], funcRejectPixel : Optional[Callable[[Tuple[int,int]], bool]]= None) -> np.ndarray:
+def floydSteinbergDither(image : np.ndarray, funcGetClosestColor : Callable[[np.ndarray], np.ndarray], funcRejectPixel : Optional[Callable[[Tuple[int,int]], bool]] = None) -> np.ndarray:
+    """Applies Floyd-Steinberg error-diffusion dithering on an input image array. This provides good gradation with medium chance of stray pixels in long gradations.
+
+    Args:
+        image (np.ndarray): Input image formatted as array.
+        funcGetClosestColor (Callable[[np.ndarray], np.ndarray]): Function to return closest color. Color returned should be in same space (and therefore scale) as image.
+        funcRejectPixel (Optional[Callable[[Tuple[int,int]], bool]], optional): Function to prevent dithering at certain pixels. This will set pixels to the closest color and throw away their error if the function returns False. Defaults to None.
+
+    Returns:
+        np.ndarray: Output image, dereferenced from original.
+    """
     if funcRejectPixel == None:
         funcRejectPixel = _bypassRejection
     return errorCorrectionDithering(image, funcGetClosestColor, distributeErrorFloydSteinberg, funcRejectPixel)
 
 def atkinsonDither(image : np.ndarray, funcGetClosestColor : Callable[[np.ndarray], np.ndarray], funcRejectPixel : Optional[Callable[[Tuple[int,int]], bool]] = None) -> np.ndarray:
+    """Applies Atkinson error-diffusion dithering on an input image array. This provides okay gradation with low chance of stray pixels in long gradations.
+
+    Args:
+        image (np.ndarray): Input image formatted as array.
+        funcGetClosestColor (Callable[[np.ndarray], np.ndarray]): Function to return closest color. Color returned should be in same space (and therefore scale) as image.
+        funcRejectPixel (Optional[Callable[[Tuple[int,int]], bool]], optional): Function to prevent dithering at certain pixels. This will set pixels to the closest color and throw away their error if the function returns False. Defaults to None.
+
+    Returns:
+        np.ndarray: Output image as array, dereferenced from original.
+    """
     if funcRejectPixel == None:
         funcRejectPixel = _bypassRejection
     return errorCorrectionDithering(image, funcGetClosestColor, distributeErrorAtkinson, funcRejectPixel)

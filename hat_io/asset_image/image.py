@@ -15,7 +15,7 @@ from ..const import ENCODING_DEFAULT_STRING
 # TODO - Split animation into own submodule
 # TODO - With LT3 images, the encoding is different which could result in bad characters moving to LT2
 
-def getTransparentLaytonPaletted(inputImage):
+def getTransparentLaytonPaletted(inputImage : ImageType) -> ImageType:
     output = inputImage.copy().convert("RGBA")
     width, height = inputImage.size
     for y in range(height):
@@ -24,7 +24,7 @@ def getTransparentLaytonPaletted(inputImage):
                 output.putpixel((x,y), (0,0,0,0))
     return output
 
-def mergePalettedImage(inputImage, outputImage, pos):
+def mergePalettedImage(inputImage : ImageType, outputImage : ImageType, pos : Tuple[int,int]):
     width, height = inputImage.size
     for y in range(height):
         for x in range(width):
@@ -35,13 +35,13 @@ class AnimationFramePartialDetails():
     def __init__(self, atlasImage : StaticImage, atlasSubImageIndex : int):
         self.atlasImageReference : StaticImage = atlasImage
         self.atlasSubImageIndex  : int = atlasSubImageIndex
-        self.pos                 = (0,0)
+        self.pos                 : Tuple[int,int] = (0,0)
 
 class AnimationFrame():
     def __init__(self):
-        self.name = ""
-        self.dimensions = (0,0)
-        self.imageComponents : List[AnimationFramePartialDetails] = []
+        self.name               : str = ""
+        self.dimensions         : Tuple[int,int] = (0,0)
+        self.imageComponents    : List[AnimationFramePartialDetails] = []
 
     def getComposedFrame(self) -> ImageType: # TODO : Store transparent version of atlas to avoid alpha reprocessing
         """Returns image copy which is guarenteed to be the full contents of the frame, with all components pasted correctly.
@@ -85,8 +85,8 @@ class AnimationFrame():
 
 class AnimationKeyframe():
     def __init__(self):
-        self.duration = 0
-        self.indexFrame = 0
+        self.duration   : int = 0
+        self.indexFrame : int = 0
 
 # TODO : Rewrite some of this to remove indexing, as values are passed by reference so not relevant
 # TODO : Sort out variable space, setters and getters on public variables
@@ -95,24 +95,24 @@ class AnimationKeyframe():
 
 class Animation():
     def __init__(self):
-        self.name                       = ""
-        self.keyframes                  = []
-        self.subAnimationIndex          = None
-        self.subAnimationOffset         = (0,0)
+        self.name                       : str = ""
+        self.keyframes                  : List[AnimationKeyframe] = []
+        self.subAnimationIndex          : Optional[int] = None
+        self.subAnimationOffset         : Tuple[int,int] = (0,0)
     
-    def addKeyframe(self, frame):
+    def addKeyframe(self, frame : AnimationKeyframe):
         self.keyframes.append(frame)
     
-    def setName(self, name):
+    def setName(self, name : str):
         self.name = name
 
-    def getName(self, name):
+    def getName(self) -> str:
         return self.name
 
-    def getFrameAtIndex(self, index):
-        pass
+    def getFrameAtIndex(self, index : int) -> Optional[AnimationKeyframe]:
+        return None
 
-    def getCycleLength(self):
+    def getCycleLength(self) -> int:
         cycleLength = 0
         for keyframe in self.keyframes:
             cycleLength += keyframe.duration
@@ -133,13 +133,13 @@ class AnimatedImage():
 
         self.subAnimation : Optional[AnimatedImage] = None
     
-    def normaliseAnimation(self, animation):
+    def normaliseAnimation(self, animation : AnimatedImage) -> AnimatedImage:
         # Merge subanimation and animation by looking at subanimation cycle and merging
         # TODO : getAnimations method which gives this automagically
         return animation
 
     @staticmethod
-    def _fromBytesArcArj(data, functionGetFileByName : Optional[Callable], isArj:bool):
+    def _fromBytesArcArj(data : bytearray, functionGetFileByName : Optional[Callable[[str], Optional[bytearray]]], isArj : bool) -> AnimatedImage:
         output = AnimatedImage()
         workingAtlas = StaticImage()
         reader = binary.BinaryReader(data=data)
@@ -152,8 +152,8 @@ class AnimatedImage():
         if isArj:
             countColours = reader.readU32()
 
-        tempWorkingImages           = []
-        tempWorkingImageResolutions = []
+        tempWorkingImages           : List[TiledImageHandler]   = []
+        tempWorkingImageResolutions : List[Tuple[int,int]]      = []
 
         for indexImage in range(countSubImage):
             logVerbose("Add Image", name="ImgImpArc")
@@ -248,7 +248,7 @@ class AnimatedImage():
                 reader.seek(offsetSubAnimationData)
                 tempOffset = [[],[]]
                 for indexDimension in range(2):
-                    for indexOffset in range(countAnims):
+                    for _indexOffset in range(countAnims):
                         tempOffset[indexDimension].append(reader.readS16())
                 for indexAnim in range(countAnims):
                     output.animations[indexAnim].subAnimationOffset = (tempOffset[0][indexAnim], tempOffset[1][indexAnim])
@@ -257,15 +257,15 @@ class AnimatedImage():
         return output
 
     @staticmethod
-    def fromBytesArc(data, functionGetFileByName=None):
+    def fromBytesArc(data : bytearray, functionGetFileByName : Optional[Callable[[str], Optional[bytearray]]] = None) -> AnimatedImage:
         return AnimatedImage._fromBytesArcArj(data, functionGetFileByName, False)
     
     @staticmethod
-    def fromBytesArj(data, functionGetFileByName=None):
+    def fromBytesArj(data : bytearray, functionGetFileByName : Optional[Callable[[str], Optional[bytearray]]] = None) -> AnimatedImage:
         return AnimatedImage._fromBytesArcArj(data, functionGetFileByName, True)
 
     @staticmethod
-    def fromBytesArcHd(data : bytes, atlas : ImageType, functionGetFileByName : Optional[Callable[[str], Tuple[bytes, Optional[ImageType]]]] = None):
+    def fromBytesArcHd(data : bytearray, atlas : ImageType, functionGetFileByName : Optional[Callable[[str], Tuple[bytes, Optional[ImageType]]]] = None) -> AnimatedImage:
         # TODO - Move some code from original arc routine, HD follows almost same code (but switches to png for storage)
         output                  = AnimatedImage()
         reader                  = binary.BinaryReader(data = data)
@@ -373,7 +373,7 @@ class AnimatedImage():
         # TODO - SubAnimation naming?
         writer.writePaddedString("", 128, ENCODING_DEFAULT_STRING)
 
-    def toBytesArcHd(self, exportVariables=False) -> Tuple[bytes, ImageType]:
+    def toBytesArcHd(self, exportVariables : bool = False) -> Tuple[bytes, ImageType]:
         # TODO - Similar to place data, separate this properly to make HD vs non-HD identifiable
         # Squashes all frames into one ARC (HD). No palette is used, so these is no risk of quality loss but memory loss can be high.
         # TODO - Find good infinite 2D bin-packing algorithm for packing images efficiently
@@ -433,7 +433,7 @@ class AnimatedImage():
         
         return (writer.data, atlas)
 
-    def toBytesArc(self, exportVariables=False) -> Optional[bytes]:
+    def toBytesArc(self, exportVariables = False) -> Optional[bytes]:
 
         # Squashes all frames into one ARC. Palette is shared so potential to lose much quality
         # TODO - When input is an ARC, no requantization should be done (unless a face, but should be worked around).
@@ -447,8 +447,8 @@ class AnimatedImage():
             # TODO - Bugfix - needs to be image output
             palette  = getPaletteFromImages(images)
 
-            packedImages = []
-            packedDimensions = []
+            packedImages        : List[TiledImageHandler] = []
+            packedDimensions    : List[Tuple[int,int]] = []
 
             # Prepare everything
             for indexImage, image in enumerate(images):
@@ -506,14 +506,13 @@ class AnimatedImage():
             return writer.data
         return None
 
-    def toBytesCAni(self):
+    def toBytesCAni(self) -> bytearray:
         packAnim = LaytonPack2()
         scriptAnim = LaytonScript()
-
-        pass
+        return b''
 
     @staticmethod
-    def fromBytesCAni(data):
+    def fromBytesCAni(data : bytearray) -> AnimatedImage:
         output = AnimatedImage()
 
         scriptAnim  = LaytonScript()
@@ -570,27 +569,27 @@ class AnimatedImage():
 
 class StaticImage():
     def __init__(self):
-        self.subImages = []
+        self.subImages : List[ImageType] = []
     
     def addImage(self, image : ImageType):
         self.subImages.append(image)
 
-    def getImage(self, indexImage):
+    def getImage(self, indexImage : int) -> Optional[ImageType]:
         if 0 <= indexImage < len(self.subImages):
             return self.subImages[indexImage]
         return None
     
-    def getCountImages(self):
+    def getCountImages(self) -> int:
         return len(self.subImages)
 
-    def removeImage(self, indexImage):
+    def removeImage(self, indexImage : int) -> bool:
         if 0 <= indexImage < len(self.subImages):
             self.subImages.pop(indexImage)
             return True
         return False
     
     @staticmethod
-    def fromBytesArc(data):
+    def fromBytesArc(data : bytearray) -> StaticImage:
         output = StaticImage()
         reader = binary.BinaryReader(data=data)
         workingImage = TiledImageHandler()
@@ -609,7 +608,7 @@ class StaticImage():
         output.addImage(workingImage.tilesToImage(resolution))
         return output
     
-    def toBytesArc(self):
+    def toBytesArc(self) -> List[bytearray]:
         # TODO - Not this...
         tempOutput = []
         for indexImage in range(self.getCountImages()):
@@ -639,7 +638,7 @@ class StaticImage():
         return tempOutput
 
     @staticmethod
-    def fromBytesLImg(data):
+    def fromBytesLImg(data : bytearray) -> StaticImage:
         output = StaticImage()
         reader = binary.BinaryReader(data=data)
         if reader.read(4) == b'LIMG':

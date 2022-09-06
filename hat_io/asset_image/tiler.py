@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional, Tuple
 
 from ...hat_io.asset_image.colour import eightToFive, fiveToEight
-from ..binary import BinaryWriter
+from ..binary import BinaryReader, BinaryWriter
 from ...common import logVerbose
 from PIL.Image import Image as ImageType
 from PIL import Image
@@ -14,7 +14,7 @@ from math import ceil, log
 
 # TODO - Paletted non-Layton images will literally break everything
 
-def alignToFitTile(image):
+def alignToFitTile(image : ImageType) -> ImageType:
     width, height = image.size
     if width % 8 == 0 and height % 8 == 0:
         return image.copy()
@@ -35,7 +35,7 @@ def alignToFitTile(image):
             output.paste(image.convert("RGB"), (0,0))
     return output
 
-def purgePaletteList(palette):
+def purgePaletteList(palette : List[int]) -> List[int]:
     # TODO - Get palette length from image
 
     endIndex = len(palette) // 3
@@ -54,15 +54,15 @@ def purgePaletteList(palette):
 
     return list(palette[0:endIndex * 3])
 
-def getMaxPaletteValue(image) -> Optional[int]:
+def getMaxPaletteValue(image : ImageType) -> Optional[int]:
     if image.mode == "P":
         return image.getextrema()[1]
     return None
 
-def getPaletteFromImages(images):
+def getPaletteFromImages(images : List[ImageType]) -> ImageType:
     # There is a limit in PIL but hopefully this will never be reached
     countPixels = 0
-    rgbImages = []
+    rgbImages : List[ImageType] = []
     for image in images:
         rgbImages.append(image.convert("RGB"))
         width, height = image.size
@@ -85,11 +85,11 @@ class Tile():
     DEFAULT_GLB         = (0,0)
 
     def __init__(self):
-        self.image  = None
-        self.glb    = (0,0)
-        self.offset = (0,0)
+        self.image  : Optional[ImageType]   = None
+        self.glb    : Tuple[int,int]        = (0,0)
+        self.offset : Tuple[int,int]        = (0,0)
     
-    def setImageFromBytes(self, data, resolution, bpp, palette):
+    def setImageFromBytes(self, data : bytes, resolution : Tuple[int,int], bpp : int, palette : List[int]):
         # TODO - Fix length of palette as this will always be 768 under PIL
         self.image = Image.new("P", resolution)
         self.image.putpalette(palette)
@@ -107,7 +107,7 @@ class Tile():
                     x = 0
 
     @staticmethod
-    def fromBytes(data, resolution, bpp, palette):
+    def fromBytes(data : bytes, resolution : Tuple[int,int], bpp : int, palette : List[int]):
         output = Tile()
         output.setImageFromBytes(data, resolution, bpp, palette)
         return output
@@ -145,7 +145,7 @@ class Tile():
                         output.writeInt(workingByte, 1)
         return output.data
     
-    def setImage(self, image):
+    def setImage(self, image : Optional[ImageType]):
         self.image = image
 
     def setGlb(self, value : Tuple[int,int]):
@@ -159,30 +159,30 @@ class Tile():
             return None
         return self.image.size
     
-    def getImage(self):
+    def getImage(self) -> Optional[ImageType]:
         return self.image
 
 class TileProlongedDecode(Tile):
     def __init__(self):
         Tile.__init__(self)
-        self.decodingData = b''
-        self.bpp = 0
-        self.needsDecode = True
-        self.useArjDecoding = False
+        self.decodingData   : bytes = b''
+        self.bpp            : int   = 0
+        self.needsDecode    : bool  = True
+        self.useArjDecoding : bool  = False
     
     @staticmethod
-    def fromBytes(data, resolution, bpp, palette, useArjDecoding=False):
+    def fromBytes(data : bytes, resolution : Tuple[int,int], bpp : int, palette : List[int], useArjDecoding : bool = False):
         output = TileProlongedDecode()
         output.useArjDecoding = useArjDecoding
         output.setImageFromBytes(data, resolution, bpp, palette)
         return output
     
-    def setImageFromBytes(self, data, resolution, bpp, palette):
+    def setImageFromBytes(self, data : bytes, resolution : Tuple[int,int], bpp : int, palette : List[int]):
         self.image = Image.new("P", resolution)
         self.bpp = bpp
         self.decodingData = data
     
-    def decode(self, palette):
+    def decode(self, palette : List[int]):
         if self.needsDecode:
             self.image.putpalette(palette)
             width, height = self.image.size
@@ -289,7 +289,9 @@ class TiledImageHandler():
 
     # TODO - Improve tile support for arj and rewrite to force typing (make more resilient)
     # TODO - Multithread decoding for speedup especially on backgrounds
-    def addTileFromReader(self, reader, prolongDecoding=False, useArjDecoding=False, resolution=Tile.DEFAULT_RESOLUTION, glb=Tile.DEFAULT_GLB, offset=Tile.DEFAULT_OFFSET, overrideBpp=-1):
+    def addTileFromReader(self, reader : BinaryReader, prolongDecoding : bool = False, useArjDecoding : bool = False,
+                          resolution : Tuple[int,int] = Tile.DEFAULT_RESOLUTION, glb : Tuple[int,int] = Tile.DEFAULT_GLB,
+                          offset : Tuple[int,int] = Tile.DEFAULT_OFFSET, overrideBpp : int = -1):
         if overrideBpp != -1:
             bpp = overrideBpp
         else:
@@ -308,7 +310,7 @@ class TiledImageHandler():
             if type(tile) == TileProlongedDecode:
                 tile.decode(self.paletteContinuous)
  
-    def tilesToImage(self, resolution, useOffset = False) -> ImageType:
+    def tilesToImage(self, resolution : Tuple[int,int], useOffset : bool = False) -> ImageType:
         self.decodeProlongedTiles()
         width, height = resolution
         output = Image.new("P", resolution)
@@ -340,9 +342,9 @@ class TiledImageHandler():
                     output.paste(tileImage, (x * 8, y * 8))
         return output
     
-    def imageToTiles(self, image, useOffset=False, usePalette=[]):
+    def imageToTiles(self, image : ImageType, useOffset : bool = False, usePalette : List[int] = []) -> Optional[Tuple[int,int]]:
 
-        def getDimensionSplits(dimension, maxDim):
+        def getDimensionSplits(dimension : int, maxDim : int) -> List[int]:
             dimension = round(ceil(dimension / 8) * 8)
             splits = [8]
             while splits[-1] < maxDim or splits[-1] < dimension:
@@ -358,7 +360,7 @@ class TiledImageHandler():
                         break
             return output
 
-        def getDimensionSplitsLayton2(dimension):
+        def getDimensionSplitsLayton2(dimension : int) -> List[int]:
             return getDimensionSplits(dimension, maxDim=128)
 
         # TODO : Extend palette, change palette, etc
@@ -368,7 +370,7 @@ class TiledImageHandler():
         width, height = imagePadded.size
         logVerbose("\tNew dimensions", width, "x", height, name="TilerToTile")
         if width > (2 ** 16 - 1) or height > (2 ** 16 - 1):
-            return
+            return None
         
         alphaFillPixels = []
         if imagePadded.mode == "RGBA":

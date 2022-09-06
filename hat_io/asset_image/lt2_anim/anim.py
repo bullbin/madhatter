@@ -19,6 +19,13 @@ from ...const import ENCODING_DEFAULT_STRING
 
 class Keyframe():
     def __init__(self, idxFrame : int, duration : int):
+        """Representation for a keyframe in image-based animation.
+        Negative values will be replaced with 0.
+
+        Args:
+            idxFrame (int): Frame index in main animation asset.
+            duration (int): Amount of frames to hold the keyframe (60fps interval).
+        """
         if idxFrame < 0:
             self.__idxFrame = 0
         else:
@@ -68,6 +75,8 @@ class Keyframe():
 
 class Animation():
     def __init__(self):
+        """Representation for Layton keyframed animations.
+        """
         self.__name             : str               = "Create an Animation"
         self.keyframes          : List[Keyframe]    = []
         self.idxSubAnimation    : int               = 0
@@ -96,6 +105,8 @@ class Animation():
         return self.__name
     
 class AnimatedEditableImage():
+    """Editable representation for ARC and ARJ images. Alternative to madhatter.hat_io.asset_image.AnimatedImage with better usability and API.
+    """
 
     MAX_COLOR_COUNT = 255
     MAX_COLOR_BG = 199
@@ -104,6 +115,11 @@ class AnimatedEditableImage():
     DEFAULT_COLOR_ALPHA = (0,255,0)
 
     def __init__(self, maxColors : int = 199):
+        """Editable representation for ARC and ARJ images. Alternative to madhatter.hat_io.asset_image.AnimatedImage with better usability and API.
+
+        Args:
+            maxColors (int, optional): Max color count. Limited to 199. Defaults to 199.
+        """
         self.__maxColors : int = maxColors
 
         # TODO - Fix paletting operations with mixed color transforms
@@ -123,6 +139,8 @@ class AnimatedEditableImage():
         self.__nameSubAnimation : str   = ""
         for index in range(1,17):
             self.__variables["Var%i" % index] = [0,0,0,0,0,0,0,0]
+        
+        self.__sourceWasArj : bool = False
 
     def __invalidQuantizedCache(self):
         self.__framesQuantizedCache = []
@@ -145,7 +163,7 @@ class AnimatedEditableImage():
         If the amount of colors is higher than the max color count for this image, it will be cut.
 
         Args:
-            overrideLinearPalette (List[Tuple[float,float,float]]): _description_
+            overrideLinearPalette (List[Tuple[float,float,float]]): List of linear RGB tuples for the palette.
         """
         self.__invalidQuantizedCache()
         self.__palette = list(overrideLinearPalette)
@@ -354,10 +372,10 @@ class AnimatedEditableImage():
         Call getQuantizedFrame to see what the frame would look like when exported.
 
         Args:
-            idxFrame (int): _description_
+            idxFrame (int): Index of the frame to view.
 
         Returns:
-            Optional[Tuple[ImageType, ColorManagementController]]: _description_
+            Optional[Tuple[ImageType, ColorManagementController]]: A copy of the image alongside its color management data.
         """
         rawFrameData = self.getRawFrame(idxFrame)
         if rawFrameData == None:
@@ -470,12 +488,28 @@ class AnimatedEditableImage():
         return output
 
     def getAnimationByName(self, nameAnimation : str) -> Optional[Animation]:
+        """Gets the first animation with a matching name.
+
+        Args:
+            nameAnimation (str): Name to match.
+
+        Returns:
+            Optional[Animation]: Matching animation, or None if not found.
+        """
         for animation in self.__animations:
             if animation.getName() == nameAnimation:
                 return animation
         return None
 
     def getAnimationByIndex(self, idxAnimation : int) -> Optional[Animation]:
+        """Gets the animation at the given index.
+
+        Args:
+            idxAnimation (int): Index to find.
+
+        Returns:
+            Optional[Animation]: Matching animation, or None if not found.
+        """
         if 0 <= idxAnimation < len(self.__animations):
             return self.__animations[idxAnimation]
         return None
@@ -672,23 +706,33 @@ class AnimatedEditableImage():
         self.__nameSubAnimation = path
         return path
 
-    @staticmethod
-    def fromBytesArc(data : bytes) -> AnimatedEditableImage:
-        """Creates an image representation from decompressed NDS ARC bytes.
-        This method may throw an error if the image is formatted improperly.
-
-        Args:
-            data (bytes): Decompressed NDS ARC bytes.
+    def wasImported(self) -> bool:
+        """Check if this animation was created by importing.
 
         Returns:
-            AnimatedEditableImage: Image representation.
+            bool: True if the animation was imported.
         """
+        return self.__sourceWasArj != None
+    
+    def wasSourceArj(self) -> bool:
+        """Check if this animation was created from an ARJ import. This is only accurate if wasImported is True.
+
+        Returns:
+            bool: True if the source animation was from an ARJ. Will be False if either no importing was done or the import source was an ARC.
+        """
+        return self.__sourceWasArj
+
+    @staticmethod
+    def __fromBytesArcArj(data : bytes, isArj : bool = False) -> AnimatedEditableImage:
         # TODO - Rewrite this, ported from old library
         output = AnimatedEditableImage()
         reader = BinaryReader(data=data)
 
         countFrames = reader.readU16()
         bpp = 2 ** (reader.readU16() - 1)
+
+        if isArj:
+            countColors = reader.readU32()
 
         workingFrames           : List[TiledImageHandler]   = []
         workingFrameResolutions : List[Tuple[int,int]]      = []
@@ -699,21 +743,30 @@ class AnimatedEditableImage():
             logVerbose("Add Image", resolution, countTiles, name="ImgImpArc")
             workingImage = TiledImageHandler()
             for _indexTile in range(countTiles):
+                if isArj:
+                    glb = (reader.readU16(), reader.readU16())
+                else:
+                    glb = (0,0)
+
                 # TODO - Are tiles written if empty?
                 offset = (reader.readU16(), reader.readU16())
                 tileRes = (2 ** (3 + reader.readU16()), 2 ** (3 + reader.readU16()))
-                workingImage.addTileFromReader(reader, prolongDecoding=True, resolution=tileRes, offset=offset, overrideBpp=bpp)
+                workingImage.addTileFromReader(reader, prolongDecoding=True, glb=glb, resolution=tileRes, offset=offset, overrideBpp=bpp, useArjDecoding=isArj)
             
             workingFrames.append(workingImage)
             workingFrameResolutions.append(resolution)
 
-        countColors = reader.readU32()
+        if not(isArj):
+            countColors = reader.readU32()
+
         paletteRgb = getPaletteAsListFromReader(reader, countColors)
         for indexImage in range(countFrames):
             workingFrames[indexImage].setPaletteFromList(paletteRgb, countColours=countColors)
+            
             frame = workingFrames[indexImage].tilesToImage(workingFrameResolutions[indexImage], useOffset=True)
             frameRgb = frame.copy().convert("RGB")
             alpha = Image.new("L", frame.size)
+            
             for y in range(frame.size[1]):
                 for x in range(frame.size[0]):
                     idxPal = frame.getpixel((x,y))
@@ -722,8 +775,10 @@ class AnimatedEditableImage():
                         frameRgb.putpixel((x,y), (0,0,0))
                         alpha.putpixel((x,y), 0)
                     else:
+                        frame.putpixel((x,y), max(0, idxPal - 1))
                         alpha.putpixel((x,y), 255)
             
+            frame.putpalette(frame.getpalette()[3:])
             output.__frames.append(frameRgb)
             output.__framesQuantizedCache.append(frame)
             output.__framesColorTransforms.append(NullColorManagementController())
@@ -782,26 +837,43 @@ class AnimatedEditableImage():
                 output.__animations[indexAnim].idxSubAnimation = reader.readUInt(1)
             
             output.__nameSubAnimation = reader.readPaddedString(128, ENCODING_DEFAULT_STRING)
+        
+        output.__sourceWasArj = isArj
         return output
     
-    def toBytesArc(self, remapCustomAnimFrames : bool = True, exportVariables : bool = True) -> bytearray:
-        """Converts this image into an NDS ARC representation.
+    @staticmethod
+    def fromBytesArc(data : bytes) -> AnimatedEditableImage:
+        """Creates an image representation from decompressed NDS ARC bytes.
+        This method may throw an error if the image is formatted improperly.
 
         Args:
-            remapCustomAnimFrames (bool, optional): Remaps animations to avoid frame sticking. Defaults to True.
-            exportVariables (bool, optional): Exports variable block. Not part of LAYTON1, but used in LAYTON2. Defaults to True.
+            data (bytes): Decompressed NDS ARC bytes.
 
         Returns:
-            bytearray: Decompressed ARC image bytes.
+            AnimatedEditableImage: Image representation.
         """
+        return AnimatedEditableImage.__fromBytesArcArj(data, isArj = False)
+
+    @staticmethod
+    def fromBytesArj(data : bytes) -> AnimatedEditableImage:
+        """Creates an image representation from decompressed NDS ARJ bytes.
+        This method may throw an error if the image is formatted improperly.
+
+        Args:
+            data (bytes): Decompressed NDS ARJ bytes.
+
+        Returns:
+            AnimatedEditableImage: Image representation.
+        """
+        return AnimatedEditableImage.__fromBytesArcArj(data, isArj = True)
+
+    def __toBytesArcArj(self, remapCustomAnimFrames : bool = True, exportVariables : bool = True, isArj : bool = False) -> bytearray:
         # TODO - Rewrite this, currently ported from old library
 
         def prepareImagingChunk() -> Tuple[List[Tuple[int,int,int]], List[ImageType]]:
 
             rawPalette = []
-
             palette = []
-            paletteUsed = {}
 
             if len(self.__frames) == 0:
                 # Might not be needed but doesn't hurt
@@ -830,8 +902,10 @@ class AnimatedEditableImage():
                     return AnimatedEditableImage.DEFAULT_COLOR_ALPHA
                 return getUnusedColor()
 
+            # TODO - Rework section. Color rejection can move to palette culling method and transparency color fetching needs to happen after culling
             colorTrans = getTransparencyColor(self.__getQuantizedFrameNoAlpha(0))
             palette.append(colorTrans)
+            paletteMap : Dict[int,int] = {}
             outputImages : List[ImageType] = []
 
             # Quantize remaining frames
@@ -843,28 +917,22 @@ class AnimatedEditableImage():
                 for y in range(image.size[1]):
                     for x in range(image.size[0]):
                         idxUsed = image.getpixel((x,y))
-                        if funcCheckAlpha != None:
-                            if funcCheckAlpha((x,y)):
-                                if rawPalette[idxUsed] not in palette:
-                                    palette.append(rawPalette[idxUsed])
-                                paletteUsed[idxUsed] = palette.index(rawPalette[idxUsed])
-                                image.putpixel((x,y), paletteUsed[idxUsed])
-                            else:
-                                image.putpixel((x,y), 0)
-                        else:
-                            if rawPalette[idxUsed] not in palette:
+                        if funcCheckAlpha == None or funcCheckAlpha((x,y)):
+                            if idxUsed not in paletteMap:
+                                paletteMap[idxUsed] = len(palette)
                                 palette.append(rawPalette[idxUsed])
-                            paletteUsed[idxUsed] = palette.index(rawPalette[idxUsed])
-                            image.putpixel((x,y), paletteUsed[idxUsed])
-                
+                            image.putpixel((x,y), paletteMap[idxUsed])
+                        else:
+                            image.putpixel((x,y), 0)
+
                 outputImages.append(image)
             
             pilPalette = []
             for color in palette:
                 for val in color:
                     pilPalette.append(val)
-            while len(pilPalette) < 768:
-                pilPalette.append(pilPalette[-3])
+            for image in outputImages:
+                image.putpalette(pilPalette)
 
             return (palette, outputImages)
 
@@ -884,12 +952,18 @@ class AnimatedEditableImage():
             packedDimensions.append((width,height))
 
         writer.writeU16(len(images))
-        outputBpp = 4
-        for image in packedImages:
-            outputBpp = max(image.getBpp(), outputBpp)
+        if isArj:
+            outputBpp = 8
+        else:
+            outputBpp = 4
+            for image in packedImages:
+                outputBpp = max(image.getBpp(), outputBpp)
 
         encodedBpp = int(log(outputBpp, 2) + 1)
-        writer.writeU16(encodedBpp)  
+        writer.writeU16(encodedBpp)
+
+        if isArj:
+            writer.writeU32(len(rgbPalette))
 
         for indexImage, image in enumerate(packedImages):
             width, height = packedDimensions[indexImage]
@@ -897,15 +971,22 @@ class AnimatedEditableImage():
             writer.writeU16(height)
             writer.writeU32(len(image.getTiles()))
             for tile in image.getTiles():       # TODO : Optimisation, tiles can be up to 128x128 which can reduce header overhead
+                if isArj:
+                    glbX, glbY = tile.glb
+                    writer.writeU16(glbX)
+                    writer.writeU16(glbY)
+                
                 offsetX, offsetY = tile.offset
                 writer.writeU16(offsetX)
                 writer.writeU16(offsetY)
                 tileX, tileY = tile.image.size
                 writer.writeU16(int(log(tileX, 2) - 3))
                 writer.writeU16(int(log(tileY, 2) - 3))
-                writer.write(tile.toBytes(outputBpp))
+                writer.write(tile.toBytes(outputBpp, isArj=isArj))
         
-        writer.writeU32(len(rgbPalette))
+        if not(isArj):
+            writer.writeU32(len(rgbPalette))
+
         for r,g,b in rgbPalette:
             writer.writeU16(getPackedColourFromRgb888(r,g,b))
         writer.pad(30)
@@ -944,7 +1025,12 @@ class AnimatedEditableImage():
                 for variableName in self.__variables:
                     writer.writeInt(self.__variables[variableName][indexData], 2, signed=True)
             
-            if self.__nameSubAnimation != "":
+
+            nameSubAnimation = self.__nameSubAnimation
+            if isArj:
+                nameSubAnimation = ""
+
+            if nameSubAnimation != "":
                 for anim in self.__animations:
                     writer.writeS16(anim.offsetSubAnimation[0])
                 for anim in self.__animations:
@@ -954,6 +1040,30 @@ class AnimatedEditableImage():
             else:
                 for anim in self.__animations:
                     writer.pad(5)
-            writer.writePaddedString(self.__nameSubAnimation, 128, ENCODING_DEFAULT_STRING)
+            writer.writePaddedString(nameSubAnimation, 128, ENCODING_DEFAULT_STRING)
 
         return writer.data
+    
+    def toBytesArc(self, remapCustomAnimFrames : bool = True, exportVariables : bool = True) -> bytearray:
+        """Converts this image into an NDS ARC representation.
+
+        Args:
+            remapCustomAnimFrames (bool, optional): Remaps animations to avoid frame sticking. Defaults to True.
+            exportVariables (bool, optional): Exports variable block. Not part of LAYTON1, but used in LAYTON2. Defaults to True.
+
+        Returns:
+            bytearray: Decompressed ARC image bytes.
+        """
+        return self.__toBytesArcArj(remapCustomAnimFrames=remapCustomAnimFrames, exportVariables=exportVariables, isArj=False)
+    
+    def toBytesArj(self, remapCustomAnimFrames : bool = True, exportVariables : bool = True) -> bytearray:
+        """Converts this image into an NDS ARJ representation.
+
+        Args:
+            remapCustomAnimFrames (bool, optional): Remaps animations to avoid frame sticking. Defaults to True.
+            exportVariables (bool, optional): Exports variable block. Not part of LAYTON1, but used in LAYTON2. Defaults to True.
+
+        Returns:
+            bytearray: Decompressed ARJ image bytes.
+        """
+        return self.__toBytesArcArj(remapCustomAnimFrames=remapCustomAnimFrames, exportVariables=exportVariables, isArj=True)

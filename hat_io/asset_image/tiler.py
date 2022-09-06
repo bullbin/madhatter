@@ -112,32 +112,49 @@ class Tile():
         output.setImageFromBytes(data, resolution, bpp, palette)
         return output
     
-    def toBytes(self, bpp):
+    def toBytes(self, bpp : int, isArj : bool = False) -> bytearray:
         # TODO : Buffer-style output? Overkill for only supporting 8bpp and 4bpp
         output = BinaryWriter()
         if self.image != None:
-            width, height = self.getDimensions() #8x8
-            pixelsPerByte = 8 // bpp
-            for y in range(height):
-                for x in range(width // pixelsPerByte):
-                    workingByte = 0
-                    x *= pixelsPerByte
-                    for packIndex in range(pixelsPerByte):
-                        packPixel = self.image.getpixel((x + packIndex, y))
-                        workingByte += (packPixel << (packIndex * bpp))
-                    output.writeInt(workingByte, 1)
+            if isArj:
+                widthTile, heightTile = self.getDimensions()
+                pixelsPerBytes = 8 // bpp
+                # Should be 2 or 1...
+                for hSubTile in range(heightTile // 8):
+                    offsetH = hSubTile * 8
+                    for wSubTile in range(widthTile // 8):
+                        offsetW = wSubTile * 8
+                        for height in range(8):
+                            for widthChunk in range(8 // pixelsPerBytes):
+                                width = widthChunk * pixelsPerBytes
+                                encodedByte = 0
+                                for idxPixel in range(pixelsPerBytes):
+                                    pixel = self.image.getpixel((offsetW + width + idxPixel, offsetH + height))
+                                    encodedByte = encodedByte | (pixel << (bpp * idxPixel))
+                                output.writeInt(encodedByte, 1, signed=False)
+            else:
+                width, height = self.getDimensions()
+                pixelsPerByte = 8 // bpp
+                for y in range(height):
+                    for x in range(width // pixelsPerByte):
+                        workingByte = 0
+                        x *= pixelsPerByte
+                        for packIndex in range(pixelsPerByte):
+                            packPixel = self.image.getpixel((x + packIndex, y))
+                            workingByte += (packPixel << (packIndex * bpp))
+                        output.writeInt(workingByte, 1)
         return output.data
     
     def setImage(self, image):
         self.image = image
 
-    def setGlb(self, value):
+    def setGlb(self, value : Tuple[int,int]):
         self.glb = value
     
-    def setOffset(self, value):
+    def setOffset(self, value : Tuple[int,int]):
         self.offset = value
     
-    def getDimensions(self):
+    def getDimensions(self) -> Optional[Tuple[int,int]]:
         if self.image == None:
             return None
         return self.image.size

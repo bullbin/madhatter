@@ -6,7 +6,7 @@ from PIL.Image import Image as ImageType
 from PIL import Image
 from typing import Dict, List, Optional, Tuple
 from ..colour import getPackedColourFromRgb888, getPaletteAsListFromReader
-from ..tiler import TiledImageHandler
+from ..tiler import TiledImageHandler, Tile
 from ...binary import BinaryReader, BinaryWriter
 from ..paletting.alpha_helper import funcRejectPixelByThresholdingAlpha
 from ..paletting.nds_bpc_helper import getConversionBasis
@@ -554,6 +554,8 @@ class AnimatedEditableImage():
             for animation in self.__animations:
                 animation.idxSubAnimation = 0
                 animation.offsetSubAnimation = (0,0)
+        
+        # TODO - Check added animations and cull until in frame range!
 
     def variablesGetNames(self) -> List[str]:
         """Get the names of the variables for this image.
@@ -745,6 +747,7 @@ class AnimatedEditableImage():
             for _indexTile in range(countTiles):
                 if isArj:
                     glb = (reader.readU16(), reader.readU16())
+                    #print(glb)
                 else:
                     glb = (0,0)
 
@@ -947,7 +950,7 @@ class AnimatedEditableImage():
         # Prepare everything
         for indexImage, image in enumerate(images):
             workingImage = TiledImageHandler()
-            width, height = workingImage.imageToTiles(image, useOffset=True)
+            width, height = workingImage.imageToTiles(image, useOffset=True, maxDim=64)
             packedImages.append(workingImage)
             packedDimensions.append((width,height))
 
@@ -969,17 +972,91 @@ class AnimatedEditableImage():
             width, height = packedDimensions[indexImage]
             writer.writeU16(width)
             writer.writeU16(height)
-            writer.writeU32(len(image.getTiles()))
-            for tile in image.getTiles():       # TODO : Optimisation, tiles can be up to 128x128 which can reduce header overhead
+            
+            tempTiles : List[Tile] = []
+            # Credit: GBATek
+            # The sizes of ARJ tiles is specific - some cases are illegal and we need to subdivide them
+            # Important cases are 64 * 8 -> 32 * 8  .... 64 * 16 -> 32 * 16 for both horizontal and vertical
+            for tile in image.getTiles():
+                tileX, tileY = tile.image.size
+                if tileX == 64:
+                    if tileY <= 16:
+                        # Need to split
+                        splitTileLeft : Tile = Tile()
+                        splitTileLeft.setImage(tile.getImage().crop((0, 0, 32, tileY)))
+                        splitTileLeft.setOffset(tile.offset)
+
+                        splitTileRight : Tile = Tile()
+                        splitTileRight.setImage(tile.getImage().crop((32, 0, tileX, tileY)))
+                        splitTileRight.setOffset((tile.offset[0] + 32, tile.offset[1]))
+                        
+                        tempTiles.append(splitTileLeft)
+                        tempTiles.append(splitTileRight)
+                    else:
+                        tempTiles.append(tile)
+                elif tileY == 64:
+                    if tileX <= 16:
+                        # Need to split
+                        splitTileLeft : Tile = Tile()
+                        splitTileLeft.setImage(tile.getImage().crop((0, 0, tileX, 32)))
+                        splitTileLeft.setOffset(tile.offset)
+
+                        splitTileRight : Tile = Tile()
+                        splitTileRight.setImage(tile.getImage().crop((0, 32, tileX, tileY)))
+                        splitTileRight.setOffset((tile.offset[0], tile.offset[1] + 32))
+                        
+                        tempTiles.append(splitTileLeft)
+                        tempTiles.append(splitTileRight)
+                    else:
+                        tempTiles.append(tile)
+                else:
+                    tempTiles.append(tile)
+
+            writer.writeU32(len(tempTiles))
+
+            for tile in tempTiles:
+                tileX, tileY = tile.image.size
+                
                 if isArj:
-                    glbX, glbY = tile.glb
-                    writer.writeU16(glbX)
-                    writer.writeU16(glbY)
+                    # Recompute OAM attributes
+                    # TODO - Change GLB to OAM
+                    
+                    glbAtt0 = 0
+                    glbAtt1 = 0
+                    if tileX > tileY:
+                        # Horizontal shape
+                        glbAtt0 = 1
+                        if tileX > 16:
+                            if tileX == 32 and tileY == 8:
+                                glbAtt1 = 1
+                            elif tileX == 32 and tileY == 16:
+                                glbAtt1 = 2
+                            else:
+                                glbAtt1 = 3
+
+                    elif tileY > tileX:
+                        # Vertical shape
+                        glbAtt0 = 2
+                        if tileY > 16:
+                            if tileY == 32 and tileX == 8:
+                                glbAtt1 = 1
+                            elif tileY == 32 and tileX == 16:
+                                glbAtt1 = 2
+                            else:
+                                glbAtt1 = 3
+
+                    else:
+                        glbAtt1 = int(log(tileX, 2) - 3)
+
+                    glbAtt0 = glbAtt0 << 14
+                    glbAtt1 = glbAtt1 << 14
+
+                    writer.writeU16(glbAtt0)
+                    writer.writeU16(glbAtt1)
                 
                 offsetX, offsetY = tile.offset
                 writer.writeU16(offsetX)
                 writer.writeU16(offsetY)
-                tileX, tileY = tile.image.size
                 writer.writeU16(int(log(tileX, 2) - 3))
                 writer.writeU16(int(log(tileY, 2) - 3))
                 writer.write(tile.toBytes(outputBpp, isArj=isArj))

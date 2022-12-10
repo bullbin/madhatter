@@ -342,26 +342,27 @@ class TiledImageHandler():
                     output.paste(tileImage, (x * 8, y * 8))
         return output
     
-    def imageToTiles(self, image : ImageType, useOffset : bool = False, usePalette : List[int] = []) -> Optional[Tuple[int,int]]:
+    def imageToTiles(self, image : ImageType, useOffset : bool = False, usePalette : List[int] = [], maxDim : int = 128) -> Optional[Tuple[int,int]]:
 
         def getDimensionSplits(dimension : int, maxDim : int) -> List[int]:
             dimension = round(ceil(dimension / 8) * 8)
             splits = [8]
-            while splits[-1] < maxDim or splits[-1] < dimension:
+            while splits[-1] < maxDim and splits[-1] < dimension:
                 splits.append(splits[-1] * 2)
             splits.reverse()
 
             output = []
             while dimension > 0:
                 for split in splits:
-                    while split <= dimension:
+                    if split <= dimension:
                         output.append(split)
                         dimension -= split
                         break
             return output
 
         def getDimensionSplitsLayton2(dimension : int) -> List[int]:
-            return getDimensionSplits(dimension, maxDim=128)
+            # TODO - 128 for backgrounds, 64 for arjs?
+            return getDimensionSplits(dimension, maxDim=maxDim)
 
         # TODO : Extend palette, change palette, etc
         logVerbose("Called to convert!", name="TilerToTile")

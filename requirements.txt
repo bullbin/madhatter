@@ -1,0 +1,4 @@
+ndspy==4.0.0
+numpy==1.24.1
+Pillow==9.3.0
+scikit_learn==1.2.0

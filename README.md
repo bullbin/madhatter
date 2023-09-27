@@ -41,3 +41,9 @@ pip install -r requirements.txt
 ## How do I use this?
 
 As madhatter was previously internal, there isn't great documentation for modifying assets. The current API for madhatter can be convoluted due to the codebase being older in some areas than others but it is capable - it is what widebrim and the widebrim editors are based on! A wiki of examples is in progress! There are plenty docstrings and function signatures to help in the meantime. If you can't figure out how to use it or need additional help, feel free to drop an issue on GitHub.
+
+## I'm sold, who do I thank for this?
+madhatter is a continuation of shortbrim except I had the time to reverse engineer the ROM. The following were really important in getting this project to where it is now:
+- Tinke for initial research on imaging formats and LAYTON2 datatypes
+- DSDecmp for NDS compression and decompression routines
+- nocash for their excellent GBATEK hardware documentation

@@ -6,6 +6,5 @@ from .ev_str import StorySelectList
 from .goal_inf import GoalInfo
 from .ht_event import HerbteaEvent
 from .nz_lst import NazoListNds, NazoListHd
-from .sb_pht import *
 from .sm_inf import SubmapInfoNds, SubmapInfoHd
 from .tm_def import TimeDefinitionInfo

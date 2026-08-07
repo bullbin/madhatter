@@ -468,6 +468,10 @@ class AnimatedEditableImage():
         self.__framesQuantizedCache.pop(idxFrame)
         return True
 
+    def addAnimation(self, anim : Animation):
+        # TODO - Not sanity checked, needed to modify anim data (sorry)
+        self.__animations.append(anim)
+
     def getAnimationCount(self) -> int:
         """Get the number of animations in this image.
 
@@ -952,7 +956,7 @@ class AnimatedEditableImage():
             workingImage = TiledImageHandler()
             width, height = workingImage.imageToTiles(image, useOffset=True, maxDim=64)
             packedImages.append(workingImage)
-            packedDimensions.append((width,height))
+            packedDimensions.append((image.width,image.height))
 
         writer.writeU16(len(images))
         if isArj:

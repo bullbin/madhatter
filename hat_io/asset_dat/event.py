@@ -15,14 +15,16 @@ class EventData(File):
         self.charactersPosition                 = []
         self.charactersShown                    = []
         self.charactersInitialAnimationIndex    = []
-    
+        self.envId = 0  # TODO - check null value
+        self.behaviourSound = 0
+
     def load(self, data):
         reader = BinaryReader(data = data)
         self.mapBsId = reader.readU16()
         self.mapTsId = reader.readU16()
         self.behaviour = reader.readUInt(1)
+        self.behaviourSound = reader.readUInt(1)
 
-        reader.seek(6)
         for _indexChar in range(8):
             tempChar = reader.readUInt(1)
             if tempChar != 0:
@@ -36,6 +38,7 @@ class EventData(File):
                 self.charactersShown.append(True)
         for _indexChar in range(8):
             self.charactersInitialAnimationIndex.append(reader.readUInt(1))
+        self.envId = reader.readS16()
             
         self.data = data
 
@@ -52,14 +55,13 @@ class EventData(File):
         writer.writeU16(self.mapBsId)
         writer.writeU16(self.mapTsId)
         writer.writeInt(self.behaviour, 1, signed=False)
-
-        # TODO - Skipping sound
-        writer.pad(1)
+        writer.writeInt(self.behaviourSound, 1, signed=False)
+        
         padListToEight(self.characters)
         padListToEight(self.charactersPosition)
         padListToEight(self.charactersShown)
         padListToEight(self.charactersInitialAnimationIndex)
 
-        # TODO - Sound related but not read
-        writer.pad(2)
+        # This isn't actually read in-game
+        writer.writeS16(self.envId)
         self.data = writer.data

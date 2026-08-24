@@ -217,6 +217,9 @@ class NazoData(File):
     
     def hasAnswerBg(self):
         return self.__flagPuzzleHasAnswerBackground
+
+    def setAnswerBg(self, value : bool):
+        self.__flagPuzzleHasAnswerBackground = value
     
     def isAltCharacterUsed(self):
         return self.__flagUseLukeAsSolver

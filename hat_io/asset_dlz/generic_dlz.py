@@ -56,7 +56,14 @@ class DlzData(File):
         writerHeader = BinaryWriter()
         writerData = BinaryWriter()
 
+        # Databases built from scratch never went through load(), so take the entry length from the entry type
+        if self.lengthEntry == 0:
+            self.lengthEntry = getattr(self._entryType, "LENGTH_ENTRY", 0)
+
         entries = self._getFormattedEntriesForWriting()
+        if len(entries) > 0 and self.lengthEntry == 0:
+            raise ValueError("%s has entries but no entry length - its entry type defines no LENGTH_ENTRY" % type(self).__name__)
+
         for entry in entries:
             workingEntryBytes = entry.toBytes()
             if len(workingEntryBytes) == self.lengthEntry:
